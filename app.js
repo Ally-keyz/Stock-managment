@@ -1,41 +1,26 @@
-var createError = require('http-errors');
-var express = require('express');
-var path = require('path');
-var cookieParser = require('cookie-parser');
-var logger = require('morgan');
+//importation of mudules
+const express = require("express");
+const app = express()
+const mongoose = require("mongoose");
+const dotenv = require("dotenv");
+const userRoutes = require("./routes/userRoutes")
 
-var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
 
-var app = express();
+// load environment variables
+dotenv.config();
 
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'jade');
-
-app.use(logger('dev'));
+//use of middle wares
 app.use(express.json());
-app.use(express.urlencoded({ extended: false }));
-app.use(cookieParser());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use("/users",userRoutes);
 
-app.use('/', indexRouter);
-app.use('/users', usersRouter);
+// connecting to mongo database
+mongoose.connect(process.env.MONGO_URL)
+.then(()=>console.log("connected to mongo data base"))
+.catch((e)=>console.log(`Failed to connect error:${e}`))
 
-// catch 404 and forward to error handler
-app.use(function(req, res, next) {
-  next(createError(404));
-});
-
-// error handler
-app.use(function(err, req, res, next) {
-  // set locals, only providing error in development
-  res.locals.message = err.message;
-  res.locals.error = req.app.get('env') === 'development' ? err : {};
-
-  // render the error page
-  res.status(err.status || 500);
-  res.render('error');
-});
+const PORT = 5000;
+app.listen(PORT,()=>{
+  console.log(`Listening on port ${PORT}`);
+})
 
 module.exports = app;
