@@ -1,17 +1,19 @@
 const mongoose = require("mongoose");
 
-// define user schema
+// Define user schema
+const userSchema = mongoose.Schema(
+    {
+        name: { type: String, required: true },
+        email: { type: String, required: true, unique: true }, // Email should be unique
+        wareHouse: { type: String, required: true },
+        password: { type: String, required: true },
+        stocks: [{ type: mongoose.Types.ObjectId, ref: "Stock" }], // Changed to an array
+        inGoing: [{ type: mongoose.Types.ObjectId, ref: "inGoing" }], // Changed to an array
+        outGoing: [{ type: mongoose.Types.ObjectId, ref: "outGoing" }] // Changed to an array
+    },
+    { timestamps: true } // Add timestamps
+);
 
-const userSchema = mongoose.Schema({
-    name:{type:String,required:true},
-    email:{type:String,required:true},
-    wareHouse:{type:String,required:true},
-    password:{type:String,required:true},
-    Stock:{type:mongoose.Types.ObjectId,ref:"Stock"},
-    inGoing:{type:mongoose.Types.ObjectId,ref:"inGoing"},
-    outGoing:{type:mongoose.Types.ObjectId,ref:"outGoing"}
-})
+const User = mongoose.model("User", userSchema);
 
-const user = mongoose.model("users",userSchema);
-
-module.exports = user
+module.exports = User;
