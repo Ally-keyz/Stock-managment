@@ -4,6 +4,7 @@ const app = express()
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const userRoutes = require("./routes/userRoutes")
+const stockRoutes = require("./routes/stockRoutes")
 
 
 // load environment variables
@@ -12,6 +13,7 @@ dotenv.config();
 //use of middle wares
 app.use(express.json());
 app.use("/users",userRoutes);
+app.use("/stock",stockRoutes);
 
 // connecting to mongo database
 mongoose.connect(process.env.MONGO_URL)
