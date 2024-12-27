@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const bcrypt = require("bcrypt");
 const dotenv = require("dotenv");
 const User = require("../models/userModel")
+const authMiddleware = require("../middlewares/AuthMiddleware")
 
 //load environment variables
 dotenv.config()
@@ -55,10 +56,50 @@ router.post("/login",async(req,res)=>{
         if(!token){
             return res.status(400).json({error:"token not received"})
         }
-        res.status(200).json({message:"logged in",token})
+        res.status(200).json({message:"logged in",token,user:existingUser})
     } catch (error) {
         res.status(500).json({error:error.message})
     }
-})
+});
+
+// route to update users
+
+router.put("/update/:id", authMiddleware, async (req, res) => {
+    try {
+      const user = req.body;
+      if (!user || Object.keys(user).length === 0) { // Ensure `user` has fields
+        return res.status(400).json({ error: "Fields to update are required" });
+      }
+      const updatedUser = await User.findByIdAndUpdate(
+        req.params.id,
+        req.body,
+        { new: true, runValidators: true } // Use `runValidators` to enforce schema validation
+      );
+      if (!updatedUser) { // Handle case where user is not found
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.status(200).json({
+        message: "User updated successfully",
+        updatedUser,
+      });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+
+// route to delete users
+router.delete("/delete/:id", authMiddleware, async (req, res) => {
+    try {
+      const deletedUser = await User.findByIdAndDelete(req.params.id);
+      if (!deletedUser) { // Handle case where user is not found
+        return res.status(404).json({ error: "User not found" });
+      }
+      res.status(200).json({ message: "User deleted successfully" });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
 
 module.exports = router;
