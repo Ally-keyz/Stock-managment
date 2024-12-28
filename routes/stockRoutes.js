@@ -8,34 +8,69 @@ const ExcelJS = require("exceljs");
 
 // registration of the stock
 
-router.post("/register",authMiddleware, async (req, res) => {
+// Add a new product entry or dispatch
+router.post("/register", authMiddleware, async (req, res) => {
     try {
-        const { name, product, quantity, entryDate, fumugationDate, fumugated } = req.body;
+        const { 
+            entryDate, 
+            truck, 
+            wBill, 
+            originDestination, 
+            product, 
+            entry, 
+            dispatched 
+        } = req.body;
 
-        if (!name || !product || !quantity || !entryDate || fumugated === undefined) {
-            return res.status(400).json({ error: "All fields are required" });
+        // Input validation
+        if (!product) {
+            return res.status(400).json({ error: "Product name is required." });
         }
 
-        // Assuming user ID is retrieved from middleware
-        const userId = req.user.id;
+        if (!entry && !dispatched) {
+            return res.status(400).json({ error: "Specify either entry or dispatched quantity." });
+        }
+
+        if (entry && dispatched) {
+            return res.status(400).json({ error: "Only one of entry or dispatched can be specified." });
+        }
 
         const newStock = new Stock({
-            name,
+            name: req.user.wareHouse || "Unknown", // Assign user's warehouse name
+            product: "Unknown", // No product field in the file; use default
+            entryDate: entryDate || new Date(), // Default to current date if not provided
+            truck: truck || "Unknown",
+            wBill: wBill || "Unknown",
+            originDestination: originDestination || "Unknown",
             product,
-            quantity,
-            entryDate,
-            fumugationDate,
-            fumugated,
-            user: userId // Add the user ID to associate the stock
+            entry: entry || 0, // 0 if not an entry operation
+            dispatched: dispatched || 0, // 0 if not a dispatch operation
+            balance: 0, // Set balance to 0 initially
+            fumugated: true, // Default fumigated status
+            user: req.user.id // Associate with the logged-in user
         });
 
-        const saveStock = await newStock.save();
+        // Calculate the new balance
+        const lastStock = await Stock.findOne({ 
+            product, 
+            user: req.user.id 
+        }).sort({ createdAt: -1 }); // Fetch the most recent stock entry for this product
 
-        res.status(201).json({ message: "Stock registered successfully", stock: saveStock });
+        newStock.balance = lastStock 
+            ? (lastStock.balance + (entry || 0) - (dispatched || 0)) 
+            : (entry || 0);
+
+        // Save the new stock record
+        await newStock.save();
+
+        res.status(201).json({ 
+            message: "Stock operation recorded successfully.", 
+            data: newStock 
+        });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
+
 
 
 // pagination fetching of the current stock
@@ -88,6 +123,70 @@ router.delete("/delete/:id", authMiddleware, async (req, res) => {
     }
 });
 
+
+// Upload and process the stock data from the file
+router.post("/upload", authMiddleware, upload.single("file"), async (req, res) => {
+    try {
+        const file = req.file;
+        const user = req.user;
+
+        if (!file) {
+            return res.status(400).json({ error: "File upload required" });
+        }
+
+        if (!user.wareHouse) {
+            return res.status(400).json({ error: "User warehouse is not defined" });
+        }
+
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.readFile(file.path);
+
+        const worksheet = workbook.worksheets[0]; // Assume the first sheet is used
+        const stockData = [];
+
+        worksheet.eachRow((row, rowNumber) => {
+            // Skip the header row
+            if (rowNumber === 1) return;
+
+            const [
+                entryDate,
+                truck,
+                wBill,
+                originDestination,
+                entry,
+                dispatched,
+                balance,
+                fumugated
+            ] = row.values.slice(1); // Skip the first index (ExcelJS index starts from 1)
+
+            stockData.push({
+                name: user.wareHouse || "Unknown", // Assign user's warehouse name
+                product: "Unknown", // No product field in the file; use default
+                entryDate: entryDate || new Date(), // Default to current date
+                truck: truck || "Unknown", // Default to "Unknown" if undefined
+                wBill: wBill || "Unknown",
+                originDestination: originDestination || "Unknown",
+                entry: entry || 0,
+                dispatched: dispatched || 0,
+                balance: balance || 0, // Default balance to 0
+                fumugated: fumugated || false, // Default to false
+                user: req.user.id // Assign the logged-in user ID
+            });
+        });
+
+        // Save stock data to the database
+        await Stock.insertMany(stockData);
+
+        res.status(201).json({
+            message: "Stock data uploaded and processed successfully",
+            data: stockData
+        });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+
 //update stock
 router.put("/update/:id", authMiddleware, async (req, res) => {
     try {
@@ -111,27 +210,12 @@ router.put("/update/:id", authMiddleware, async (req, res) => {
     }
 });
 
-//upload the stock 
-router.post("/upload", authMiddleware, upload.single("file"), async (req, res) => {
-    try {
-        const file = req.file;
 
-        if (!file) {
-            return res.status(400).json({ error: "File upload required" });
-        }
 
-        // Process the file here (e.g., parse CSV and save stock data to the database)
-        // Example: Use a CSV parser to read the file
-
-        res.status(200).json({ message: "File uploaded successfully", file });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
-    }
-});
-
-//download the current stock report
+// Download the current stock report
 router.get("/download", authMiddleware, async (req, res) => {
     try {
+        // Fetch stocks for the logged-in user
         const stocks = await Stock.find({ user: req.user.id });
 
         const workbook = new ExcelJS.Workbook();
@@ -139,43 +223,54 @@ router.get("/download", authMiddleware, async (req, res) => {
 
         // Add header row
         worksheet.columns = [
-            { header: "Name", key: "name", width: 20 },
-            { header: "Product", key: "product", width: 20 },
-            { header: "Quantity", key: "quantity", width: 10 },
             { header: "Entry Date", key: "entryDate", width: 20 },
-            { header: "Fumigation Date", key: "fumugationDate", width: 20 },
+            { header: "Truck", key: "truck", width: 15 },
+            { header: "Waybill", key: "wBill", width: 20 },
+            { header: "Origin/Destination", key: "originDestination", width: 25 },
+            { header: "Entry", key: "entry", width: 10 },
+            { header: "Dispatched", key: "dispatched", width: 10 },
+            { header: "Balance", key: "balance", width: 10 },
             { header: "Fumigated", key: "fumugated", width: 10 }
         ];
 
         // Add rows
-        stocks.forEach(stock => {
-            worksheet.addRow({
-                name: stock.name,
-                product: stock.product,
-                quantity: stock.quantity,
-                entryDate: stock.entryDate,
-                fumugationDate: stock.fumugationDate,
-                fumugated: stock.fumugated ? "Yes" : "No"
+        if (stocks.length > 0) {
+            stocks.forEach(stock => {
+                worksheet.addRow({
+                    entryDate: stock.entryDate
+                        ? new Date(stock.entryDate).toLocaleDateString()
+                        : "N/A",
+                    truck: stock.truck || "Unknown",
+                    wBill: stock.wBill || "Unknown",
+                    originDestination: stock.originDestination || "Unknown",
+                    entry: stock.entry || 0,
+                    dispatched: stock.dispatched || 0,
+                    balance: stock.balance || "Unknown",
+                    fumugated: stock.fumugated ? "Yes" : "No"
+                });
             });
-        });
+        } else {
+            worksheet.addRow(["No stock data available."]);
+        }
 
         // Set response headers
         res.setHeader(
             "Content-Disposition",
-            "attachment; filename=stocks.xlsx"
+            "attachment; filename=stocks_report.xlsx"
         );
         res.setHeader(
             "Content-Type",
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         );
 
-        // Send the workbook
+        // Send the workbook to the client
         await workbook.xlsx.write(res);
-        res.end();
+        res.end(); // Ensure the response ends properly
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
+
 
 
 module.exports = router
