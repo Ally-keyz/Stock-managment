@@ -80,25 +80,24 @@ router.post("/register", authMiddleware, async (req, res) => {
         const lastStock = await Stock.findOne({ 
             product, 
             user: req.user.id 
-        }).sort({ entryDate: -1 });
+        }).sort({ incrementId: -1 });
 
-        // Calculate the solde for inGoingStock
-        if (lastStock) {
-            inGoingStock.solde = lastStock.balance + (entry || 0);
-            outGoingStock.solde = lastStock.balance - (dispatched || 0);
-        } else {
-            inGoingStock.solde = entry || 0;
-            outGoingStock.solde = dispatched || 0;
-        }
+        // Handle balance calculation and stock solde for inGoing and outGoing
+        let lastBalance = lastStock ? Number(lastStock.balance) : 0;
+        console.log(lastBalance); 
+        console.log(lastStock) // Ensure lastBalance is a number
+        let entryValue = Number(entry) || 0;  // Ensure entry is a number
+        let dispatchedValue = Number(dispatched) || 0;  // Ensure dispatched is a number
+
+        inGoingStock.solde = lastBalance + entryValue;
+        outGoingStock.solde = lastBalance - dispatchedValue;
 
         // Save inGoing and outGoing entries
         await inGoingStock.save();
         await outGoingStock.save();
 
         // Calculate the new balance for the stock record
-        newStock.balance = lastStock 
-            ? (lastStock.balance + (entry || 0) - (dispatched || 0)) 
-            : (entry || 0);
+        newStock.balance = lastBalance + entryValue - dispatchedValue;
 
         // Save the new stock record
         await newStock.save();
@@ -111,6 +110,7 @@ router.post("/register", authMiddleware, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
+
 
 
 
@@ -165,7 +165,8 @@ router.delete("/delete/:id", authMiddleware, async (req, res) => {
 });
 
 
-// Upload and process the stock data from the file
+const Counter = require("../models/counterModel");  // Assuming the Counter model is in this path
+
 router.post("/upload", authMiddleware, upload.single("file"), async (req, res) => {
     try {
         const file = req.file;
@@ -203,20 +204,32 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
 
             stockData.push({
                 name: user.wareHouse || "Unknown", // Assign user's warehouse name
-                product: product ||"Unknown", // No product field in the file; use default
-                entryDate: entryDate || "Nun", // Default to current date
+                product: product || "Unknown", // Default product if missing
+                entryDate: entryDate || new Date().toISOString(), // Default to current date if missing
                 truck: truck || "Unknown", // Default to "Unknown" if undefined
                 wBill: wBill || "Unknown",
                 originDestination: originDestination || "Unknown",
                 entry: entry || 0,
                 dispatched: dispatched || 0,
-                balance: balance || 0, // Default balance to 0
-                fumugated: fumugated || false, // Default to false
+                balance: balance || 0, // Default balance to 0 if missing
+                fumugated: fumugated || false, // Default fumugated status
                 user: req.user.id // Assign the logged-in user ID
             });
         });
 
-        // Save stock data to the database
+        // Fetch and update the incrementId for each record
+        const counter = await Counter.findOneAndUpdate(
+            { _id: 'stock' },
+            { $inc: { seq: stockData.length } },  // Increment the counter by the number of records
+            { new: true, upsert: true }
+        );
+
+        // Assign incrementId to each record
+        stockData.forEach((record, index) => {
+            record.incrementId = counter.seq - stockData.length + index + 1;  // Assign a unique incrementId
+        });
+
+        // Save stock data to the database in bulk
         await Stock.insertMany(stockData);
 
         res.status(201).json({
@@ -227,7 +240,6 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
         res.status(500).json({ error: error.message });
     }
 });
-
 
 //update stock
 router.put("/update/:id", authMiddleware, async (req, res) => {
