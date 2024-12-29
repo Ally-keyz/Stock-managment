@@ -6,10 +6,12 @@ const inGoingSchema = mongoose.Schema(
         plaque: { type: String, required: true },
         wb: { type: String, required: true },
         destination: { type: String, required: true },
-        dispatched: { type: String, required: true },
-        unitPrice: { type: Number, required: true }, // Changed to Number
-        value: { type: Number, required: true }, // Changed to Number
-        solde: { type: Number, required: true } // Changed to Number
+        entry: { type: String, required: true },
+        unitPrice: { type: Number, required: true }, 
+        value: { type: Number, required: true }, 
+        solde: { type: Number, required: true } ,
+        fumugated: { type: Boolean, required: true },
+        user: { type: mongoose.Types.ObjectId, ref: "User", required: true }
     },
     { timestamps: true } // Add timestamps
 );

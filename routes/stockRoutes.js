@@ -5,8 +5,9 @@ const authMiddleware = require("../middlewares/AuthMiddleware");
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" }); // Set upload destination
 const ExcelJS = require("exceljs");
+const inGoing = require("../models/inGoingModel");
+const outGoing = require("../models/outGoingModel");
 
-// registration of the stock
 
 // Add a new product entry or dispatch
 router.post("/register", authMiddleware, async (req, res) => {
@@ -18,6 +19,7 @@ router.post("/register", authMiddleware, async (req, res) => {
             originDestination, 
             product, 
             entry, 
+            unitPrice,
             dispatched 
         } = req.body;
 
@@ -34,14 +36,39 @@ router.post("/register", authMiddleware, async (req, res) => {
             return res.status(400).json({ error: "Only one of entry or dispatched can be specified." });
         }
 
+        const inGoingStock = new inGoing({
+            date: entryDate,
+            plaque: truck,
+            wb: wBill,
+            destination: originDestination,
+            entry: product,
+            unitPrice: unitPrice,
+            value: entry,
+            solde: "",  // To be calculated later
+            fumugated: false,
+            user: req.user.id
+        });
+
+        const outGoingStock = new outGoing({
+            date: entryDate,
+            plaque: truck,
+            wb: wBill,
+            destination: originDestination,
+            exit: product,
+            unitPrice: unitPrice,
+            value: dispatched,
+            solde: "",  // To be calculated later
+            fumugated: false,
+            user: req.user.id
+        });
+
         const newStock = new Stock({
             name: req.user.wareHouse || "Unknown", // Assign user's warehouse name
-            product: "Unknown", // No product field in the file; use default
+            product: product || "Unknown", // No product field in the file; use default
             entryDate: entryDate || new Date(), // Default to current date if not provided
             truck: truck || "Unknown",
             wBill: wBill || "Unknown",
             originDestination: originDestination || "Unknown",
-            product,
             entry: entry || 0, // 0 if not an entry operation
             dispatched: dispatched || 0, // 0 if not a dispatch operation
             balance: 0, // Set balance to 0 initially
@@ -49,12 +76,26 @@ router.post("/register", authMiddleware, async (req, res) => {
             user: req.user.id // Associate with the logged-in user
         });
 
-        // Calculate the new balance
+        // Calculate the solde property in both inGoing and outGoing
         const lastStock = await Stock.findOne({ 
             product, 
             user: req.user.id 
-        }).sort({ createdAt: -1 }); // Fetch the most recent stock entry for this product
+        }).sort({ entryDate: -1 });
 
+        // Calculate the solde for inGoingStock
+        if (lastStock) {
+            inGoingStock.solde = lastStock.balance + (entry || 0);
+            outGoingStock.solde = lastStock.balance - (dispatched || 0);
+        } else {
+            inGoingStock.solde = entry || 0;
+            outGoingStock.solde = dispatched || 0;
+        }
+
+        // Save inGoing and outGoing entries
+        await inGoingStock.save();
+        await outGoingStock.save();
+
+        // Calculate the new balance for the stock record
         newStock.balance = lastStock 
             ? (lastStock.balance + (entry || 0) - (dispatched || 0)) 
             : (entry || 0);
@@ -146,7 +187,7 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
 
         worksheet.eachRow((row, rowNumber) => {
             // Skip the header row
-            if (rowNumber === 1) return;
+            if (rowNumber <= 2) return;
 
             const [
                 entryDate,
@@ -156,13 +197,14 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
                 entry,
                 dispatched,
                 balance,
+                product,
                 fumugated
             ] = row.values.slice(1); // Skip the first index (ExcelJS index starts from 1)
 
             stockData.push({
                 name: user.wareHouse || "Unknown", // Assign user's warehouse name
-                product: "Unknown", // No product field in the file; use default
-                entryDate: entryDate || new Date(), // Default to current date
+                product: product ||"Unknown", // No product field in the file; use default
+                entryDate: entryDate || "Nun", // Default to current date
                 truck: truck || "Unknown", // Default to "Unknown" if undefined
                 wBill: wBill || "Unknown",
                 originDestination: originDestination || "Unknown",
@@ -223,7 +265,7 @@ router.get("/download", authMiddleware, async (req, res) => {
 
         // Add header row
         worksheet.columns = [
-            { header: "Entry Date", key: "entryDate", width: 20 },
+            { header: "Date", key: "entryDate", width: 20 },
             { header: "Truck", key: "truck", width: 15 },
             { header: "Waybill", key: "wBill", width: 20 },
             { header: "Origin/Destination", key: "originDestination", width: 25 },
@@ -237,16 +279,14 @@ router.get("/download", authMiddleware, async (req, res) => {
         if (stocks.length > 0) {
             stocks.forEach(stock => {
                 worksheet.addRow({
-                    entryDate: stock.entryDate
-                        ? new Date(stock.entryDate).toLocaleDateString()
-                        : "N/A",
+                    entryDate: stock.entryDate,
                     truck: stock.truck || "Unknown",
                     wBill: stock.wBill || "Unknown",
-                    originDestination: stock.originDestination || "Unknown",
+                    originDestination: stock.originDestination,
                     entry: stock.entry || 0,
                     dispatched: stock.dispatched || 0,
                     balance: stock.balance || "Unknown",
-                    fumugated: stock.fumugated ? "Yes" : "No"
+                    fumugated: stock.fumugated ? "No" : "Yes"
                 });
             });
         } else {

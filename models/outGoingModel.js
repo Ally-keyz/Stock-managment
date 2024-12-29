@@ -7,9 +7,11 @@ const outGoingSchema = mongoose.Schema(
         wb: { type: String, required: true },
         destination: { type: String, required: true },
         exit: { type: String, required: true },
-        unitPrice: { type: Number, required: true }, // Changed to Number
-        value: { type: Number, required: true }, // Changed to Number
-        solde: { type: Number, required: true } // Changed to Number
+        unitPrice: { type: Number, required: true }, 
+        value: { type: Number, required: true }, 
+        solde: { type: Number, required: true } ,
+        fumugated: { type: Boolean, required: true },
+        user: { type: mongoose.Types.ObjectId, ref: "User", required: true }
     },
     { timestamps: true } // Add timestamps
 );
