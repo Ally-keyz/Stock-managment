@@ -82,6 +82,8 @@ router.post("/register", authMiddleware, async (req, res) => {
             user: req.user.id 
         }).sort({ incrementId: -1 });
 
+        
+
         // Handle balance calculation and stock solde for inGoing and outGoing
         let lastBalance = lastStock ? Number(lastStock.balance) : 0;
         console.log(lastBalance); 
@@ -101,6 +103,7 @@ router.post("/register", authMiddleware, async (req, res) => {
 
         // Save the new stock record
         await newStock.save();
+
 
         res.status(201).json({ 
             message: "Stock operation recorded successfully.", 

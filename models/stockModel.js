@@ -9,7 +9,6 @@ const stockSchema = mongoose.Schema(
         truck: { type: String, required: true },
         wBill: { type: String, required: true },
         originDestination: { type: String, required: true },
-        balance: { type: String, required: true },
         entry: { type: String, required: true },
         dispatched: { type: String, required: true },
         fumugated: { type: Boolean, required: true },
@@ -18,6 +17,8 @@ const stockSchema = mongoose.Schema(
     },
     { timestamps: true }
 );
+
+
 
 // Method to update incrementId for a batch of records
 async function updateIncrementIdsAndSave(records) {
@@ -28,20 +29,17 @@ async function updateIncrementIdsAndSave(records) {
             { $inc: { seq: records.length } },  // Increment the counter by the number of records in the batch
             { new: true, upsert: true }
         );
-
         // Set incrementId for each record based on the current sequence
         records.forEach((record, index) => {
             record.incrementId = counter.seq - records.length + index + 1;  // Set a unique incrementId for each record
         });
-
         // Save the records in bulk
         await Stock.insertMany(records);
-
         return { message: "Stock records saved successfully.", data: records };
     } catch (error) {
         throw new Error(error.message);
     }
-}
+} 
 
 const Stock = mongoose.model("Stock", stockSchema);
 
