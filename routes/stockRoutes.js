@@ -12,15 +12,15 @@ const outGoing = require("../models/outGoingModel");
 // Add a new product entry or dispatch
 router.post("/register", authMiddleware, async (req, res) => {
     try {
-        const { 
-            entryDate, 
-            truck, 
-            wBill, 
-            originDestination, 
-            product, 
-            entry, 
+        const {
+            entryDate,
+            truck,
+            wBill,
+            originDestination,
+            product,
+            entry,
             unitPrice,
-            dispatched 
+            dispatched
         } = req.body;
 
         // Input validation
@@ -36,28 +36,44 @@ router.post("/register", authMiddleware, async (req, res) => {
             return res.status(400).json({ error: "Only one of entry or dispatched can be specified." });
         }
 
+        // Fetch the incrementId for this operation
+        const counter = await Counter.findOneAndUpdate(
+            { _id: 'stock' },
+            { $inc: { seq: 1 } },
+            { new: true, upsert: true }
+        );
+
+        const lastStock = await Stock.findOne({ 
+            product, 
+            user: req.user.id 
+        }).sort({ incrementId: -1 });
+
+        let lastBalance = lastStock ? Number(lastStock.balance) : 0;
+        let entryValue = Number(entry) || 0;  // Ensure entry is a number
+        let dispatchedValue = Number(dispatched) || 0;  // Ensure dispatched is a number
+
         const inGoingStock = new inGoing({
-            date: entryDate,
-            plaque: truck,
-            wb: wBill,
-            destination: originDestination,
+            date: entryDate || new Date(),
+            plaque: truck || "Unknown",
+            wb: wBill || "Unknown",
+            destination: originDestination || "Unknown",
             entry: product,
-            unitPrice: unitPrice,
-            value: entry,
-            solde: "",  // To be calculated later
+            unitPrice: unitPrice || 0,
+            value: entryValue,
+            solde: lastBalance + entryValue,
             fumugated: false,
             user: req.user.id
         });
 
         const outGoingStock = new outGoing({
-            date: entryDate,
-            plaque: truck,
-            wb: wBill,
-            destination: originDestination,
+            date: entryDate || new Date(),
+            plaque: truck || "Unknown",
+            wb: wBill || "Unknown",
+            destination: originDestination || "Unknown",
             exit: product,
-            unitPrice: unitPrice,
-            value: dispatched,
-            solde: "",  // To be calculated later
+            unitPrice: unitPrice || 0,
+            value: dispatchedValue,
+            solde: lastBalance - dispatchedValue,
             fumugated: false,
             user: req.user.id
         });
@@ -69,41 +85,20 @@ router.post("/register", authMiddleware, async (req, res) => {
             truck: truck || "Unknown",
             wBill: wBill || "Unknown",
             originDestination: originDestination || "Unknown",
-            entry: entry || 0, // 0 if not an entry operation
-            dispatched: dispatched || 0, // 0 if not a dispatch operation
-            balance: 0, // Set balance to 0 initially
-            fumugated: true, // Default fumigated status
-            user: req.user.id // Associate with the logged-in user
+            entry: entryValue, // 0 if not an entry operation
+            dispatched: dispatchedValue, // 0 if not a dispatch operation
+            balance: lastBalance + entryValue - dispatchedValue, // Calculate balance
+            fumugated: false, // Default fumigated status
+            user: req.user.id, // Associate with the logged-in user
+            incrementId: counter.seq // Increment ID from the counter
         });
 
-        // Calculate the solde property in both inGoing and outGoing
-        const lastStock = await Stock.findOne({ 
-            product, 
-            user: req.user.id 
-        }).sort({ incrementId: -1 });
-
-        
-
-        // Handle balance calculation and stock solde for inGoing and outGoing
-        let lastBalance = lastStock ? Number(lastStock.balance) : 0;
-        console.log(lastBalance); 
-        console.log(lastStock) // Ensure lastBalance is a number
-        let entryValue = Number(entry) || 0;  // Ensure entry is a number
-        let dispatchedValue = Number(dispatched) || 0;  // Ensure dispatched is a number
-
-        inGoingStock.solde = lastBalance + entryValue;
-        outGoingStock.solde = lastBalance - dispatchedValue;
-
-        // Save inGoing and outGoing entries
-        await inGoingStock.save();
-        await outGoingStock.save();
-
-        // Calculate the new balance for the stock record
-        newStock.balance = lastBalance + entryValue - dispatchedValue;
+        // Save inGoing and outGoing entries if applicable
+        if (entryValue > 0) await inGoingStock.save();
+        if (dispatchedValue > 0) await outGoingStock.save();
 
         // Save the new stock record
         await newStock.save();
-
 
         res.status(201).json({ 
             message: "Stock operation recorded successfully.", 
@@ -113,8 +108,6 @@ router.post("/register", authMiddleware, async (req, res) => {
         res.status(500).json({ error: error.message });
     }
 });
-
-
 
 
 // pagination fetching of the current stock
@@ -183,6 +176,7 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
             return res.status(400).json({ error: "User warehouse is not defined" });
         }
 
+        // Load Excel file
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(file.path);
 
@@ -190,7 +184,7 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
         const stockData = [];
 
         worksheet.eachRow((row, rowNumber) => {
-            // Skip the header row
+            // Skip the header rows
             if (rowNumber <= 2) return;
 
             const [
@@ -205,31 +199,36 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
                 fumugated
             ] = row.values.slice(1); // Skip the first index (ExcelJS index starts from 1)
 
+            // Validate and transform data
             stockData.push({
-                name: user.wareHouse || "Unknown", // Assign user's warehouse name
-                product: product || "Unknown", // Default product if missing
-                entryDate: entryDate || new Date().toISOString(), // Default to current date if missing
-                truck: truck || "Unknown", // Default to "Unknown" if undefined
+                name: user.wareHouse || "Unknown",
+                product: product || "Unknown",
+                entryDate: entryDate || new Date().toISOString(),
+                truck: truck || "Unknown",
                 wBill: wBill || "Unknown",
                 originDestination: originDestination || "Unknown",
                 entry: entry || 0,
                 dispatched: dispatched || 0,
-                balance: balance || 0, // Default balance to 0 if missing
-                fumugated: fumugated || false, // Default fumugated status
-                user: req.user.id // Assign the logged-in user ID
+                balance: balance !== null && balance !== undefined ? balance : 0, // Explicit check for balance
+                fumugated: fumugated || false,
+                user: req.user.id
             });
         });
+
+        if (stockData.length === 0) {
+            return res.status(400).json({ error: "No valid data found in the Excel file" });
+        }
 
         // Fetch and update the incrementId for each record
         const counter = await Counter.findOneAndUpdate(
             { _id: 'stock' },
-            { $inc: { seq: stockData.length } },  // Increment the counter by the number of records
+            { $inc: { seq: stockData.length } },
             { new: true, upsert: true }
         );
 
         // Assign incrementId to each record
         stockData.forEach((record, index) => {
-            record.incrementId = counter.seq - stockData.length + index + 1;  // Assign a unique incrementId
+            record.incrementId = counter.seq - stockData.length + index + 1;
         });
 
         // Save stock data to the database in bulk
@@ -240,7 +239,8 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
             data: stockData
         });
     } catch (error) {
-        res.status(500).json({ error: error.message });
+        console.error("Error processing upload:", error); // Log error details
+        res.status(500).json({ error: "An error occurred while processing the file" });
     }
 });
 

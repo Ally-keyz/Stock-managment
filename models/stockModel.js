@@ -11,6 +11,7 @@ const stockSchema = mongoose.Schema(
         originDestination: { type: String, required: true },
         entry: { type: String, required: true },
         dispatched: { type: String, required: true },
+        balance: { type: String, required: true },
         fumugated: { type: Boolean, required: true },
         incrementId: { type: Number, unique: true },
         user: { type: mongoose.Types.ObjectId, ref: "User", required: true }, // Reference to User

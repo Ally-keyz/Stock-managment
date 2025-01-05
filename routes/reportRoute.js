@@ -70,89 +70,184 @@ router.get('/reports/annual', authMiddleware, async (req, res) => {
     }
 });
 
+// Helper function to ensure directory existence
+const ensureDirectoryExistence = (filePath) => {
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+};
 
-//Generation of word document report
+// Helper function to sanitize file names
+const sanitizeFilename = (filename) => filename.replace(/[\/\\?%*:|"<>]/g, '_');
+
 // Helper function to generate Word document
-const generateWordDocument = async (data, userText, title) => {
+const generateWordDocument = async (data, userName, whareHouse, title) => {
     const doc = new Document({
         sections: [
             {
                 properties: {},
                 children: [
-                    // Title Paragraph
+                    // Ministry Header
                     new Paragraph({
                         children: [
                             new TextRun({
-                                text: title,
+                                text: "MINISTRY OF AGRICULTURE AND ANIMAL RESOURCES",
                                 bold: true,
-                                size: 32,
+                                size: 28,
+                                allCaps: true,
                             }),
                         ],
+                        alignment: "center",
+                        spacing: { after: 200 },
                     }),
-                    // User Text Paragraph
                     new Paragraph({
-                        text: userText,
+                        children: [
+                            new TextRun({
+                                text: "NATIONAL STRATEGIC GRAIN RESERVE (N.S.G.R)",
+                                bold: true,
+                                size: 24,
+                            }),
+                        ],
+                        alignment: "center",
                         spacing: { after: 400 },
                     }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: "INTERNAL MEMO",
+                                bold: true,
+                                underline: {},
+                                size: 28,
+                            }),
+                        ],
+                        alignment: "center",
+                        spacing: { after: 400 },
+                    }),
+
+                    // Memo Information
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: `FROM              : ${userName}`, bold: true }),
+                        ],
+                        spacing: { after: 200 },
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: `TITLE                : ${whareHouse} Warehouse Storekeeper`, bold: true }),
+                        ],
+                        spacing: { after: 200 },
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: "TO                  : Acting Coordinator SPIU/MINAGRI", bold: true }),
+                        ],
+                        spacing: { after: 200 },
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: "RE                  : Monthly Report", bold: true }),
+                        ],
+                        spacing: { after: 200 },
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: `DATE               : ${new Date().toLocaleDateString()}`, bold: true }),
+                        ],
+                        spacing: { after: 400 },
+                    }),
+
+                    // Memo Content
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: `Dear Acting Coordinator,\n\nI hereby submit to you the report of activities carried out in ${title} in Nyamagabe warehouse.\n\nYou will find details in the attached document.\n\nThanks.\n\nComments:\n\n`,
+                                bold: true,
+                            }),
+                        ],
+                        spacing: { after: 400 },
+                    }),
+
                     // Table Header
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: `THE FOLLOWING TABLE SHOWS THE CURRENT BEANS STORE DURING ${title.toUpperCase()}`,
+                                bold: true,
+                            }),
+                        ],
+                        alignment: "center",
+                        spacing: { after: 400 },
+                    }),
+
+                    // Data Table
                     new Table({
                         rows: [
-                            // Table Header Row
                             new TableRow({
                                 children: [
-                                    new TableCell({
-                                        children: [new Paragraph({ text: "Product", bold: true })],
-                                    }),
-                                    new TableCell({
-                                        children: [new Paragraph({ text: "Entry Date", bold: true })],
-                                    }),
-                                    new TableCell({
-                                        children: [new Paragraph({ text: "Entry", bold: true })],
-                                    }),
-                                    new TableCell({
-                                        children: [new Paragraph({ text: "Dispatched", bold: true })],
-                                    }),
-                                    new TableCell({
-                                        children: [new Paragraph({ text: "Balance", bold: true })],
-                                    }),
+                                    new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: "BEANS", bold: true })] })] }),
+                                    new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: "PERIOD", bold: true })] })] }),
+                                    new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: "RECEIVED QUANTITY (KG)", bold: true })] })] }),
+                                    new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: "DISPATCHED QUANTITY (KG)", bold: true })] })] }),
+                                    new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: "CLOSED BALANCE (KG)", bold: true })] })] }),
                                 ],
                             }),
-                            // Table Rows for Data
                             ...data.map(
                                 (item) =>
                                     new TableRow({
                                         children: [
-                                            new TableCell({
-                                                children: [new Paragraph(item.product)],
-                                            }),
-                                            new TableCell({
-                                                children: [new Paragraph(item.entryDate)],
-                                            }),
-                                            new TableCell({
-                                                children: [new Paragraph(item.entry.toString())],
-                                            }),
-                                            new TableCell({
-                                                children: [new Paragraph(item.dispatched.toString())],
-                                            }),
-                                            new TableCell({
-                                                children: [new Paragraph(item.balance.toString())],
-                                            }),
+                                            new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: item.product, bold: true })] })] }),
+                                            new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: item.entryDate, bold: true })] })] }),
+                                            new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: item.entry.toString(), bold: true })] })] }),
+                                            new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: item.dispatched.toString(), bold: true })] })] }),
+                                            new TableCell({ width: { size: 10000, type: WidthType.DXA }, children: [new Paragraph({ children: [new TextRun({ text: item.balance.toString(), bold: true })] })] }),
                                         ],
                                     })
                             ),
                         ],
+                    }),
+
+                    // Conclusion
+                    new Paragraph({
+                        children: [
+                            new TextRun({
+                                text: `CONCLUSION:\n\nIn general, the main activities in ${title} consisted of assuring the safety of stored commodities, which are beans.\n\nAll this assures the safety of stored commodities, which are beans.\n\n`,
+                                bold: true,
+                            }),
+                        ],
+                        spacing: { after: 400 },
+                    }),
+
+                    // Signature
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: "AYURUKUNDO Alice", bold: true }),
+                        ],
+                        alignment: "right",
+                        spacing: { before: 400, after: 200 },
+                    }),
+                    new Paragraph({
+                        children: [
+                            new TextRun({ text: "Nyamagabe warehouse/Storekeeper", bold: true }),
+                        ],
+                        alignment: "right",
+                        spacing: { after: 200 },
                     }),
                 ],
             },
         ],
     });
 
-    const filePath = path.join(__dirname, `../downloads/${title.replace(/ /g, '_')}.docx`);
+
+
+    const safeTitle = sanitizeFilename(title);
+    const filePath = path.join(__dirname, `../downloads/${safeTitle}.docx`);
+    ensureDirectoryExistence(filePath);
+
     const buffer = await Packer.toBuffer(doc);
     fs.writeFileSync(filePath, buffer);
     return filePath;
 };
-
 
 // API for downloading Word Monthly Report
 router.get('/reports/monthly/word', authMiddleware, async (req, res) => {
@@ -165,6 +260,7 @@ router.get('/reports/monthly/word', authMiddleware, async (req, res) => {
 
         const startDate = new Date(year, month - 1, 1);
         const endDate = new Date(year, month, 0);
+        const user = req.user
 
         const monthlyReport = await Stock.find({ user: req.user.id }).sort({ entryDate: 1 });
 
@@ -179,18 +275,21 @@ router.get('/reports/monthly/word', authMiddleware, async (req, res) => {
 
         const filePath = await generateWordDocument(
             filteredReport,
-            userText || "This is your custom report.",
-            `Monthly Report ${month}/${year}`
+            user.name,
+            user.wareHouse,
+            `${month}-${year}`
         );
 
-        res.download(filePath, () => {
+        res.download(filePath, (err) => {
+            if (err) {
+                console.error("Error during file download:", err);
+            }
             fs.unlinkSync(filePath); // Cleanup after download
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
-
 // API for downloading Word Annual Report
 router.get('/reports/annual/word', authMiddleware, async (req, res) => {
     try {
@@ -202,6 +301,7 @@ router.get('/reports/annual/word', authMiddleware, async (req, res) => {
 
         const startDate = new Date(year, 0, 1);
         const endDate = new Date(year, 11, 31);
+        
 
         const annualReport = await Stock.find({ user: req.user.id }).sort({ entryDate: 1 });
 
