@@ -326,6 +326,30 @@ router.get("/download", authMiddleware, async (req, res) => {
     }
 });
 
+//route for ingoing stocks
+router.get("/inGoing",authMiddleware,async(req,res)=>{
+    try {
+        const stock = await inGoing.find({user:req.user});
+        if(!stock){
+            return res.status(404).json({error:"Not found"})
+        }
+        res.status(200).json({message:"Found",stock})
+    } catch (error) {
+        res.status(500).json({error:error.messagge})
+    }
+})
 
+//route for outgoing stocks
+router.get("/outGoing",authMiddleware,async(req,res)=>{
+    try {
+        const stock = await outGoing.find({user:req.user});
+        if(!stock){
+            return res.status(404).json({error:"Not found"})
+        }
+        res.status(200).json({message:"Found",stock})
+    } catch (error) {
+        res.status(500).json({error:error.messagge})
+    }
+})
 
 module.exports = router
