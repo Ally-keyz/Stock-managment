@@ -328,8 +328,5 @@ router.get('/reports/annual/word', authMiddleware, async (req, res) => {
     }
 });
 
-router.post("/regisre",()=>{
-
-})
 
 module.exports = router;
