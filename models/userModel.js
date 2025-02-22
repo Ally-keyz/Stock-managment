@@ -5,6 +5,7 @@ const userSchema = mongoose.Schema(
     {
         name: { type: String, required: true },
         email: { type: String, required: true, unique: true }, // Email should be unique
+        position:{type:String,required:true},
         wareHouse: { type: String, required: true },
         password: { type: String, required: true },
         stocks: [{ type: mongoose.Types.ObjectId, ref: "Stock" }], // Changed to an array

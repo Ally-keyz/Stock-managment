@@ -40,7 +40,7 @@ async function updateIncrementIdsAndSave(records) {
     } catch (error) {
         throw new Error(error.message);
     }
-} 
+}
 
 const Stock = mongoose.model("Stock", stockSchema);
 
