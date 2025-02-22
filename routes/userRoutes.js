@@ -5,15 +5,16 @@ const bcrypt = require("bcrypt");
 const dotenv = require("dotenv");
 const User = require("../models/userModel")
 const authMiddleware = require("../middlewares/AuthMiddleware")
+const adminMiddleware = require("../middlewares/adminAuthMiddleware");
 
 //load environment variables
 dotenv.config()
 
 // user registration route
-router.post("/register",async(req,res)=>{
+router.post("/register",adminMiddleware,async(req,res)=>{
     try {
-        const { name , email , wareHouse , password} = req.body;
-        if(!name || !email || !wareHouse || !password){
+        const { name , email , wareHouse ,position, password} = req.body;
+        if(!name || !email || !wareHouse || !position || !password){
             return res.status(400).json({eror:"All fields are required"})
         }
         const existingUser = await User.findOne({email:email});
@@ -25,6 +26,7 @@ router.post("/register",async(req,res)=>{
             name,
             email,
             wareHouse,
+            position,
             password:hashedPassword
         })
 
@@ -52,7 +54,7 @@ router.post("/login",async(req,res)=>{
         if(!isMatch){
             return res.status(401).json({error:"password is invalid"})
         }
-        const token = jwt.sign({id:existingUser._id,email:existingUser.email},process.env.JWT_KEY,{expiresIn:"1h"})
+        const token = jwt.sign({id:existingUser._id,email:existingUser.email},process.env.JWT_KEY,{expiresIn:"4h"});
         if(!token){
             return res.status(400).json({error:"token not received"})
         }
@@ -64,7 +66,7 @@ router.post("/login",async(req,res)=>{
 
 // route to update users
 
-router.put("/update/:id", authMiddleware, async (req, res) => {
+router.put("/update/:id", adminMiddleware, async (req, res) => {
     try {
       const user = req.body;
       if (!user || Object.keys(user).length === 0) { // Ensure `user` has fields
@@ -89,7 +91,7 @@ router.put("/update/:id", authMiddleware, async (req, res) => {
   
 
 // route to delete users
-router.delete("/delete/:id", authMiddleware, async (req, res) => {
+router.delete("/delete/:id", adminMiddleware, async (req, res) => {
     try {
       const deletedUser = await User.findByIdAndDelete(req.params.id);
       if (!deletedUser) { // Handle case where user is not found

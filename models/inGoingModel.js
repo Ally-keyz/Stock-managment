@@ -8,7 +8,8 @@ const inGoingSchema = mongoose.Schema(
         destination: { type: String, required: true },
         entry: { type: String, required: true },
         unitPrice: { type: Number, required: true }, 
-        value: { type: Number, required: true }, 
+        value: { type: Number, required: true },
+        balance: { type: Number, required: true } , 
         solde: { type: Number, required: true } ,
         fumugated: { type: Boolean, required: true },
         user: { type: mongoose.Types.ObjectId, ref: "User", required: true }

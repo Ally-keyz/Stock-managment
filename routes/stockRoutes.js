@@ -60,6 +60,7 @@ router.post("/register", authMiddleware, async (req, res) => {
             entry: product,
             unitPrice: unitPrice || 0,
             value: entryValue,
+            balance:lastBalance,
             solde: lastBalance + entryValue,
             fumugated: false,
             user: req.user.id
@@ -73,6 +74,7 @@ router.post("/register", authMiddleware, async (req, res) => {
             exit: product,
             unitPrice: unitPrice || 0,
             value: dispatchedValue,
+            balance:lastBalance,
             solde: lastBalance - dispatchedValue,
             fumugated: false,
             user: req.user.id
@@ -87,6 +89,7 @@ router.post("/register", authMiddleware, async (req, res) => {
             originDestination: originDestination || "Unknown",
             entry: entryValue, // 0 if not an entry operation
             dispatched: dispatchedValue, // 0 if not a dispatch operation
+            openingBalance:lastBalance || 0,
             balance: lastBalance + entryValue - dispatchedValue, // Calculate balance
             fumugated: false, // Default fumigated status
             user: req.user.id, // Associate with the logged-in user
@@ -194,6 +197,7 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
                 originDestination,
                 entry,
                 dispatched,
+                openingBalance,
                 balance,
                 product,
                 fumugated
@@ -209,6 +213,7 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
                 originDestination: originDestination || "Unknown",
                 entry: entry || 0,
                 dispatched: dispatched || 0,
+                openingBalance:openingBalance || 0,
                 balance: balance !== null && balance !== undefined ? balance : 0, // Explicit check for balance
                 fumugated: fumugated || false,
                 user: req.user.id
