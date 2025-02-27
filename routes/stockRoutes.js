@@ -57,10 +57,10 @@ router.post("/register", authMiddleware, async (req, res) => {
             { $inc: { seq: 1 } },
             { new: true, upsert: true }
         );
-
+        const clearedProduct = product.charAt(0).toUpperCase() + product.slice(1).toLowerCase()
         // Find the last stock entry for balance calculation
         const lastStock = await Stock.findOne({
-            product,
+            clearedProduct,
             user: req.user.id
         }).sort({ incrementId: -1 });
 
@@ -74,7 +74,7 @@ router.post("/register", authMiddleware, async (req, res) => {
             plaque: truck || "Unknown",
             wb: wBill || "Unknown",
             destination: originDestination || "Unknown",
-            entry: product,
+            entry: clearedProduct,
             unitPrice: unitPrice || 0,
             value: entryValue,
             balance: lastBalance,
@@ -89,7 +89,7 @@ router.post("/register", authMiddleware, async (req, res) => {
             plaque: truck || "Unknown",
             wb: wBill || "Unknown",
             destination: originDestination || "Unknown",
-            exit: product,
+            exit:   clearedProduct,
             unitPrice: unitPrice || 0,
             value: dispatchedValue,
             balance: lastBalance,
@@ -143,7 +143,8 @@ router.post("/register", authMiddleware, async (req, res) => {
                 harm: harm || "Unknown",
                 testWeight: testWeight || 0,
                 grade: grade || "Unknown",
-                product: dispatchedStock._id
+                product: dispatchedStock._id,
+                user:req.user
             });
             await qualityAssessDispatch.save();
         }
