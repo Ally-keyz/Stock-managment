@@ -1,11 +1,11 @@
 const express = require("express");
 const router = express.Router();
 const adminAuthMiddleware = require("../middlewares/adminAuthMiddleware");
-const adminMiddleware = require("../middlewares/adminAuthMiddleware"); // Ensure this is correct
+const adminMiddleware = require("../middlewares/AuthMiddleware"); // Ensure this is correct
 const Contract = require("../models/contractsModel");
 
 // Route to add a contract (only admins are allowed)
-router.post("/", async (req, res) => {
+router.post("/",adminAuthMiddleware, async (req, res) => {
     try {
         const {
             province,
