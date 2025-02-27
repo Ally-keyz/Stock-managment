@@ -16,180 +16,204 @@ const authMiddleware = require("../middlewares/AuthMiddleware");
 // Register a new stock operation with Quality Assessment
 // ----------------------------
 router.post("/register", authMiddleware, async (req, res) => {
-    try {
-        const {
-            entryDate,
-            truck,
-            wBill,
-            originDestination,
-            product,
-            entry,
-            unitPrice,
-            dispatched,
-            contract,
-            MC,
-            harm,
-            testWeight,
-            grade
-        } = req.body;
+  try {
+    const {
+      entryDate,
+      truck,
+      wBill,
+      originDestination,
+      product,
+      entry,
+      unitPrice,
+      dispatched,
+      contract,
+      MC,
+      harm,
+      testWeight,
+      grade
+    } = req.body;
 
-        // Input validation
-        if (!product) {
-            return res.status(400).json({ error: "Product name is required." });
-        }
-        if (!entry && !dispatched) {
-            return res.status(400).json({ error: "Specify either entry or dispatched quantity." });
-        }
-        if (entry && dispatched) {
-            return res.status(400).json({ error: "Only one of entry or dispatched can be specified." });
-        }
-
-        // Check if the contract exists
-        const existingContract = await Contract.findOne({ operatorName: contract });
-        console.log(existingContract);
-        if (!existingContract) {
-            return res.status(400).json({ error: "Specified contract does not exist" });
-        }
-
-        // Fetch the incrementId for this operation
-        const counter = await Counter.findOneAndUpdate(
-            { _id: "stock" },
-            { $inc: { seq: 1 } },
-            { new: true, upsert: true }
-        );
-        const clearedProduct = product.charAt(0).toUpperCase() + product.slice(1).toLowerCase()
-        // Find the last stock entry for balance calculation
-        const lastStock = await Stock.findOne({
-            product,
-            user: req.user.id
-        }).sort({ incrementId: -1 });
-
-        let lastBalance = lastStock ? Number(lastStock.balance) : 0;
-        let entryValue = Number(entry) || 0;
-        let dispatchedValue = Number(dispatched) || 0;
-
-        // Create inGoing and outGoing stock records if applicable
-        const inGoingStock = entryValue > 0 ? new inGoing({
-            date: entryDate || new Date(),
-            plaque: truck || "Unknown",
-            wb: wBill || "Unknown",
-            destination: originDestination || "Unknown",
-            entry: clearedProduct,
-            unitPrice: unitPrice || 0,
-            value: entryValue,
-            balance: lastBalance,
-            solde: lastBalance + entryValue,
-            contract: existingContract.operatorName || "unknown",
-            fumugated: false,
-            user: req.user.id
-        }) : null;
-
-        const outGoingStock = dispatchedValue > 0 ? new outGoing({
-            date: entryDate || new Date(),
-            plaque: truck || "Unknown",
-            wb: wBill || "Unknown",
-            destination: originDestination || "Unknown",
-            exit:   clearedProduct,
-            unitPrice: unitPrice || 0,
-            value: dispatchedValue,
-            balance: lastBalance,
-            solde: lastBalance - dispatchedValue,
-            contract: existingContract.operatorName || "unknown",
-            fumugated: false,
-            user: req.user.id
-        }) : null;
-
-        const newStock = new Stock({
-            name: req.user.wareHouse || "Unknown",
-            product: product || "Unknown",
-            entryDate: entryDate || new Date(),
-            truck: truck || "Unknown",
-            wBill: wBill || "Unknown",
-            originDestination: originDestination || "Unknown",
-            unitePrice: unitPrice || 0,
-            entry: entryValue,
-            dispatched: dispatchedValue,
-            openingBalance: lastBalance || 0,
-            balance: lastBalance + entryValue - dispatchedValue,
-            fumugated: true,
-            contract: existingContract.operatorName || "unknown",
-            user: req.user.id,
-            incrementId: counter.seq
-        });
-        
-
-        // Save inGoing and outGoing entries if applicable
-        const entryStock = inGoingStock ? await inGoingStock.save() : null;
-        const dispatchedStock = outGoingStock ? await outGoingStock.save() : null;
-
-        // Save the main stock record
-        await newStock.save();
-
-        // Save quality assessments based on the operation performed
-        if (entryStock) {
-            const qualityAssessEntry = new Quality({
-                MC: MC || 0,
-                harm: harm || "Unknown",
-                testWeight: testWeight || 0,
-                grade: grade || "Unknown",
-                product: entryStock._id,
-                user:req.user
-            });
-            await qualityAssessEntry.save();
-        }
-        if (dispatchedStock) {
-            const qualityAssessDispatch = new Quality({
-                MC: MC || 0,
-                harm: harm || "Unknown",
-                testWeight: testWeight || 0,
-                grade: grade || "Unknown",
-                product: dispatchedStock._id,
-                user:req.user
-            });
-            await qualityAssessDispatch.save();
-        }
-
-        res.status(201).json({
-            message: "Stock operation recorded successfully.",
-            data: newStock
-        });
-    } catch (error) {
-        res.status(500).json({ error: error.message });
+    // Input validation
+    if (!product) {
+      return res.status(400).json({ error: "Product name is required." });
     }
+    if (!entry && !dispatched) {
+      return res.status(400).json({ error: "Specify either entry or dispatched quantity." });
+    }
+    if (entry && dispatched) {
+      return res.status(400).json({ error: "Only one of entry or dispatched can be specified." });
+    }
+
+    // Check if the contract exists
+    const existingContract = await Contract.findOne({ operatorName: contract });
+    console.log(existingContract);
+    if (!existingContract) {
+      return res.status(400).json({ error: "Specified contract does not exist" });
+    }
+
+    // Fetch the incrementId for this operation
+    const counter = await Counter.findOneAndUpdate(
+      { _id: "stock" },
+      { $inc: { seq: 1 } },
+      { new: true, upsert: true }
+    );
+    const clearedProduct = product.charAt(0).toUpperCase() + product.slice(1).toLowerCase();
+
+    // Find the last stock entry for balance calculation
+    const lastStock = await Stock.findOne({
+      product,
+      user: req.user.id
+    }).sort({ incrementId: -1 });
+
+    let lastBalance = lastStock ? Number(lastStock.balance) : 0;
+    let entryValue = Number(entry) || 0;
+    let dispatchedValue = Number(dispatched) || 0;
+
+    // Check that the dispatched value does not exceed available balance
+    if (dispatchedValue > lastBalance) {
+      return res.status(400).json({ error: "Dispatched quantity cannot exceed available stock balance." });
+    }
+
+    // Create inGoing and outGoing stock records if applicable
+    const inGoingStock = entryValue > 0 ? new inGoing({
+      date: entryDate || new Date(),
+      plaque: truck || "Unknown",
+      wb: wBill || "Unknown",
+      destination: originDestination || "Unknown",
+      entry: clearedProduct,
+      unitPrice: unitPrice || 0,
+      value: entryValue,
+      balance: lastBalance,
+      solde: lastBalance + entryValue,
+      contract: existingContract.operatorName || "unknown",
+      fumugated: false,
+      user: req.user.id
+    }) : null;
+
+    const outGoingStock = dispatchedValue > 0 ? new outGoing({
+      date: entryDate || new Date(),
+      plaque: truck || "Unknown",
+      wb: wBill || "Unknown",
+      destination: originDestination || "Unknown",
+      exit: clearedProduct,
+      unitPrice: unitPrice || 0,
+      value: dispatchedValue,
+      balance: lastBalance,
+      solde: lastBalance - dispatchedValue,
+      contract: existingContract.operatorName || "unknown",
+      fumugated: false,
+      user: req.user.id
+    }) : null;
+
+    const newStock = new Stock({
+      name: req.user.wareHouse || "Unknown",
+      product: product || "Unknown",
+      entryDate: entryDate || new Date(),
+      truck: truck || "Unknown",
+      wBill: wBill || "Unknown",
+      originDestination: originDestination || "Unknown",
+      unitePrice: unitPrice || 0,
+      entry: entryValue,
+      dispatched: dispatchedValue,
+      openingBalance: lastBalance || 0,
+      balance: lastBalance + entryValue - dispatchedValue,
+      fumugated: true,
+      contract: existingContract.operatorName || "unknown",
+      user: req.user.id,
+      incrementId: counter.seq
+    });
+        
+    // Save inGoing and outGoing entries if applicable
+    const entryStock = inGoingStock ? await inGoingStock.save() : null;
+    const dispatchedStock = outGoingStock ? await outGoingStock.save() : null;
+
+    // Save the main stock record
+    await newStock.save();
+
+    // Save quality assessments based on the operation performed
+    if (entryStock) {
+      const qualityAssessEntry = new Quality({
+        MC: MC || 0,
+        harm: harm || "Unknown",
+        testWeight: testWeight || 0,
+        grade: grade || "Unknown",
+        product: entryStock._id,
+        user: req.user
+      });
+      await qualityAssessEntry.save();
+    }
+    if (dispatchedStock) {
+      const qualityAssessDispatch = new Quality({
+        MC: MC || 0,
+        harm: harm || "Unknown",
+        testWeight: testWeight || 0,
+        grade: grade || "Unknown",
+        product: dispatchedStock._id,
+        user: req.user
+      });
+      await qualityAssessDispatch.save();
+    }
+
+    res.status(201).json({
+      message: "Stock operation recorded successfully.",
+      data: newStock
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
+
 //-----------------------------
-//route to calculate the total stock position 
+// Route to calculate the total stock position 
 router.get("/position", authMiddleware, async (req, res) => {
-    try {
+  try {
       const user = req.user;
       if (!user) {
-        return res.status(400).json({ error: "User cannot be found" });
+          return res.status(400).json({ error: "User cannot be found" });
       }
-      
-      // Aggregate across all stock documents for the user.
+
+      // Aggregate total stock entries
       const totalPosition = await Stock.aggregate([
-        { 
-          $match: { user: user._id } // Filter documents for the current user
-        },
-        { 
-          $group: {
-            _id: null,
-            // If balance is a number in the DB, use "$balance"
-            // If balance is a string, convert it using $toDouble
-            totalBalance: { $sum: { $toDouble: "$balance" } }
+          { $match: { user: user._id } },
+          { 
+              $group: {
+                  _id: null,
+                  totalBalance: { $sum: { $toDouble: "$entry" } } // Ensure entry is treated as a number
+              }
           }
-        }
       ]);
-  
-      // totalPosition will be an array; if no records, default to 0
+
+      // Aggregate total stock dispatched
+      const totalDispatched = await Stock.aggregate([
+          { $match: { user: user._id } },
+          { 
+              $group: {
+                  _id: null,
+                  totalBalance: { $sum: { $toDouble: "$dispatched" } } // Ensure dispatched is treated as a number
+              }
+          }
+      ]);
+
+      // Extract values safely
+      const valueDispatched = totalDispatched.length ? totalDispatched[0].totalBalance : 0;
       const total = totalPosition.length ? totalPosition[0].totalBalance : 0;
-      res.status(200).json({ totalBalance: total });
-    } catch (error) {
+
+      // Calculate remaining stock
+      const calculation = total - valueDispatched;
+
+      // Send response
+      res.status(200).json({ 
+          totalBalance: calculation, 
+          totalEntry: total, 
+          totalDispatched: valueDispatched 
+      });
+
+  } catch (error) {
       console.error("Error calculating total balance:", error);
       res.status(500).json({ error: error.message });
-    }
-  });
-  
+  }
+});
+
 
 // ----------------------------
 // Pagination: Get current stock for the logged-in user
