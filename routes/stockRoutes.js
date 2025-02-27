@@ -60,7 +60,7 @@ router.post("/register", authMiddleware, async (req, res) => {
         const clearedProduct = product.charAt(0).toUpperCase() + product.slice(1).toLowerCase()
         // Find the last stock entry for balance calculation
         const lastStock = await Stock.findOne({
-            clearedProduct,
+            product,
             user: req.user.id
         }).sort({ incrementId: -1 });
 
@@ -116,7 +116,7 @@ router.post("/register", authMiddleware, async (req, res) => {
             user: req.user.id,
             incrementId: counter.seq
         });
-        console.log(unitPrice);
+        
 
         // Save inGoing and outGoing entries if applicable
         const entryStock = inGoingStock ? await inGoingStock.save() : null;
