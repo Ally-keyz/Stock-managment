@@ -9,11 +9,13 @@ const stockSchema = mongoose.Schema(
         truck: { type: String, required: true },
         wBill: { type: String, required: true },
         originDestination: { type: String, required: true },
+        unitePrice:{type:Number,required:true},
         entry: { type: String, required: true },
         dispatched: { type: String, required: true },
         openingBalance: { type: String, required: true },
         balance: { type: String, required: true },
         fumugated: { type: Boolean, required: true },
+        contract:{type:String,required:true},
         incrementId: { type: Number, unique: true },
         user: { type: mongoose.Types.ObjectId, ref: "User", required: true }, // Reference to User
     },

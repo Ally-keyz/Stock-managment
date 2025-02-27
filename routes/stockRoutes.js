@@ -1,15 +1,20 @@
 const express = require("express");
 const router = express.Router();
-const Stock = require("../models/stockModel");
-const authMiddleware = require("../middlewares/AuthMiddleware");
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" }); // Set upload destination
 const ExcelJS = require("exceljs");
+
+const Stock = require("../models/stockModel");
 const inGoing = require("../models/inGoingModel");
 const outGoing = require("../models/outGoingModel");
+const Contract = require("../models/contractsModel");
+const Quality = require("../models/qualityAssessmentModel");
+const Counter = require("../models/counterModel"); // Moved to top
+const authMiddleware = require("../middlewares/AuthMiddleware");
 
-
-// Add a new product entry or dispatch
+// ----------------------------
+// Register a new stock operation with Quality Assessment
+// ----------------------------
 router.post("/register", authMiddleware, async (req, res) => {
     try {
         const {
@@ -20,39 +25,51 @@ router.post("/register", authMiddleware, async (req, res) => {
             product,
             entry,
             unitPrice,
-            dispatched
+            dispatched,
+            contract,
+            MC,
+            harm,
+            testWeight,
+            grade
         } = req.body;
 
         // Input validation
         if (!product) {
             return res.status(400).json({ error: "Product name is required." });
         }
-
         if (!entry && !dispatched) {
             return res.status(400).json({ error: "Specify either entry or dispatched quantity." });
         }
-
         if (entry && dispatched) {
             return res.status(400).json({ error: "Only one of entry or dispatched can be specified." });
         }
 
+        // Check if the contract exists
+        const existingContract = await Contract.findOne({ operatorName: contract });
+        console.log(existingContract);
+        if (!existingContract) {
+            return res.status(400).json({ error: "Specified contract does not exist" });
+        }
+
         // Fetch the incrementId for this operation
         const counter = await Counter.findOneAndUpdate(
-            { _id: 'stock' },
+            { _id: "stock" },
             { $inc: { seq: 1 } },
             { new: true, upsert: true }
         );
 
-        const lastStock = await Stock.findOne({ 
-            product, 
-            user: req.user.id 
+        // Find the last stock entry for balance calculation
+        const lastStock = await Stock.findOne({
+            product,
+            user: req.user.id
         }).sort({ incrementId: -1 });
 
         let lastBalance = lastStock ? Number(lastStock.balance) : 0;
-        let entryValue = Number(entry) || 0;  // Ensure entry is a number
-        let dispatchedValue = Number(dispatched) || 0;  // Ensure dispatched is a number
+        let entryValue = Number(entry) || 0;
+        let dispatchedValue = Number(dispatched) || 0;
 
-        const inGoingStock = new inGoing({
+        // Create inGoing and outGoing stock records if applicable
+        const inGoingStock = entryValue > 0 ? new inGoing({
             date: entryDate || new Date(),
             plaque: truck || "Unknown",
             wb: wBill || "Unknown",
@@ -60,13 +77,14 @@ router.post("/register", authMiddleware, async (req, res) => {
             entry: product,
             unitPrice: unitPrice || 0,
             value: entryValue,
-            balance:lastBalance,
+            balance: lastBalance,
             solde: lastBalance + entryValue,
+            contract: existingContract.operatorName || "unknown",
             fumugated: false,
             user: req.user.id
-        });
+        }) : null;
 
-        const outGoingStock = new outGoing({
+        const outGoingStock = dispatchedValue > 0 ? new outGoing({
             date: entryDate || new Date(),
             plaque: truck || "Unknown",
             wb: wBill || "Unknown",
@@ -74,65 +92,119 @@ router.post("/register", authMiddleware, async (req, res) => {
             exit: product,
             unitPrice: unitPrice || 0,
             value: dispatchedValue,
-            balance:lastBalance,
+            balance: lastBalance,
             solde: lastBalance - dispatchedValue,
+            contract: existingContract.operatorName || "unknown",
             fumugated: false,
             user: req.user.id
-        });
+        }) : null;
 
         const newStock = new Stock({
-            name: req.user.wareHouse || "Unknown", // Assign user's warehouse name
-            product: product || "Unknown", // No product field in the file; use default
-            entryDate: entryDate || new Date(), // Default to current date if not provided
+            name: req.user.wareHouse || "Unknown",
+            product: product || "Unknown",
+            entryDate: entryDate || new Date(),
             truck: truck || "Unknown",
             wBill: wBill || "Unknown",
             originDestination: originDestination || "Unknown",
-            entry: entryValue, // 0 if not an entry operation
-            dispatched: dispatchedValue, // 0 if not a dispatch operation
-            openingBalance:lastBalance || 0,
-            balance: lastBalance + entryValue - dispatchedValue, // Calculate balance
-            fumugated: false, // Default fumigated status
-            user: req.user.id, // Associate with the logged-in user
-            incrementId: counter.seq // Increment ID from the counter
+            unitePrice: unitPrice || 0,
+            entry: entryValue,
+            dispatched: dispatchedValue,
+            openingBalance: lastBalance || 0,
+            balance: lastBalance + entryValue - dispatchedValue,
+            fumugated: true,
+            contract: existingContract.operatorName || "unknown",
+            user: req.user.id,
+            incrementId: counter.seq
         });
+        console.log(unitPrice);
 
         // Save inGoing and outGoing entries if applicable
-        if (entryValue > 0) await inGoingStock.save();
-        if (dispatchedValue > 0) await outGoingStock.save();
+        const entryStock = inGoingStock ? await inGoingStock.save() : null;
+        const dispatchedStock = outGoingStock ? await outGoingStock.save() : null;
 
-        // Save the new stock record
+        // Save the main stock record
         await newStock.save();
 
-        res.status(201).json({ 
-            message: "Stock operation recorded successfully.", 
-            data: newStock 
+        // Save quality assessments based on the operation performed
+        if (entryStock) {
+            const qualityAssessEntry = new Quality({
+                MC: MC || 0,
+                harm: harm || "Unknown",
+                testWeight: testWeight || 0,
+                grade: grade || "Unknown",
+                product: entryStock._id
+            });
+            await qualityAssessEntry.save();
+        }
+        if (dispatchedStock) {
+            const qualityAssessDispatch = new Quality({
+                MC: MC || 0,
+                harm: harm || "Unknown",
+                testWeight: testWeight || 0,
+                grade: grade || "Unknown",
+                product: dispatchedStock._id
+            });
+            await qualityAssessDispatch.save();
+        }
+
+        res.status(201).json({
+            message: "Stock operation recorded successfully.",
+            data: newStock
         });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
+//-----------------------------
+//route to calculate the total stock position 
+router.get("/position", authMiddleware, async (req, res) => {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(400).json({ error: "User cannot be found" });
+      }
+      
+      // Aggregate across all stock documents for the user.
+      const totalPosition = await Stock.aggregate([
+        { 
+          $match: { user: user._id } // Filter documents for the current user
+        },
+        { 
+          $group: {
+            _id: null,
+            // If balance is a number in the DB, use "$balance"
+            // If balance is a string, convert it using $toDouble
+            totalBalance: { $sum: { $toDouble: "$balance" } }
+          }
+        }
+      ]);
+  
+      // totalPosition will be an array; if no records, default to 0
+      const total = totalPosition.length ? totalPosition[0].totalBalance : 0;
+      res.status(200).json({ totalBalance: total });
+    } catch (error) {
+      console.error("Error calculating total balance:", error);
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
 
-
-// pagination fetching of the current stock
-router.get("/myStock",authMiddleware, async (req, res) => {
+// ----------------------------
+// Pagination: Get current stock for the logged-in user
+// ----------------------------
+router.get("/myStock", authMiddleware, async (req, res) => {
     try {
         const { page, limits = 10 } = req.query;
-
         if (!page) {
             return res.status(400).json({ error: "Page is required" });
         }
-
         const pageNumber = parseInt(page, 10);
         const limitNumber = parseInt(limits, 10);
-
-        // Assuming user ID is retrieved from middleware
         const userId = req.user.id;
 
-        // Fetch stocks belonging to the logged-in user
         const stocks = await Stock.find({ user: userId })
             .skip((pageNumber - 1) * limitNumber)
             .limit(limitNumber);
-
         const totalCount = await Stock.countDocuments({ user: userId });
 
         res.status(200).json({
@@ -145,65 +217,65 @@ router.get("/myStock",authMiddleware, async (req, res) => {
     }
 });
 
-// delete stock
+// ----------------------------
+// Delete a stock record (ensuring ownership)
+// ----------------------------
 router.delete("/delete/:id", authMiddleware, async (req, res) => {
     try {
         const stockId = req.params.id;
-
-        // Find and delete the stock, ensuring it belongs to the logged-in user
         const stock = await Stock.findOneAndDelete({ _id: stockId, user: req.user.id });
-
         if (!stock) {
             return res.status(404).json({ error: "Stock not found or unauthorized" });
         }
-
         res.status(200).json({ message: "Stock deleted successfully" });
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-
-const Counter = require("../models/counterModel");  // Assuming the Counter model is in this path
-
-router.post("/upload", authMiddleware, upload.single("file"), async (req, res) => {
+// ----------------------------
+// Upload stock data via Excel file
+// ----------------------------
+router.post("/upload", authMiddleware, upload.single("file"), async(req, res) => {
     try {
         const file = req.file;
         const user = req.user;
-
         if (!file) {
             return res.status(400).json({ error: "File upload required" });
         }
-
         if (!user.wareHouse) {
             return res.status(400).json({ error: "User warehouse is not defined" });
         }
 
-        // Load Excel file
         const workbook = new ExcelJS.Workbook();
         await workbook.xlsx.readFile(file.path);
-
-        const worksheet = workbook.worksheets[0]; // Assume the first sheet is used
+        const worksheet = workbook.worksheets[0]; // Use the first sheet
         const stockData = [];
 
-        worksheet.eachRow((row, rowNumber) => {
-            // Skip the header rows
-            if (rowNumber <= 2) return;
-
+        worksheet.eachRow(async(row, rowNumber) => {
+            if (rowNumber <= 2) return; // Skip headers
             const [
                 entryDate,
                 truck,
                 wBill,
                 originDestination,
+                unitPrice,
                 entry,
                 dispatched,
                 openingBalance,
-                balance,
+                ClosingBalance,
                 product,
-                fumugated
-            ] = row.values.slice(1); // Skip the first index (ExcelJS index starts from 1)
+                fumugated,
+                contract
+            ] = row.values.slice(1); // Adjust for ExcelJS indexing
 
-            // Validate and transform data
+            // handle contract validation
+            const contractValidation = await Contract.findOne({operatorName:contract});
+
+            if(!contractValidation){
+                return res.status(400).json({error:"The specified contract is not found "});
+            }
+
             stockData.push({
                 name: user.wareHouse || "Unknown",
                 product: product || "Unknown",
@@ -211,11 +283,14 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
                 truck: truck || "Unknown",
                 wBill: wBill || "Unknown",
                 originDestination: originDestination || "Unknown",
+                unitPrice: unitPrice || 0,
                 entry: entry || 0,
                 dispatched: dispatched || 0,
-                openingBalance:openingBalance || 0,
-                balance: balance !== null && balance !== undefined ? balance : 0, // Explicit check for balance
-                fumugated: fumugated || false,
+                openingBalance: openingBalance || 0,
+                balance: ClosingBalance !== null && ClosingBalance !== undefined ? ClosingBalance : 0,
+                fumugated: fumugated || true,
+                harm: harm || "Unknown",
+                contract: contractValidation.operatorName || "undefined",
                 user: req.user.id
             });
         });
@@ -224,19 +299,16 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
             return res.status(400).json({ error: "No valid data found in the Excel file" });
         }
 
-        // Fetch and update the incrementId for each record
         const counter = await Counter.findOneAndUpdate(
             { _id: 'stock' },
             { $inc: { seq: stockData.length } },
             { new: true, upsert: true }
         );
 
-        // Assign incrementId to each record
         stockData.forEach((record, index) => {
             record.incrementId = counter.seq - stockData.length + index + 1;
         });
 
-        // Save stock data to the database in bulk
         await Stock.insertMany(stockData);
 
         res.status(201).json({
@@ -244,22 +316,23 @@ router.post("/upload", authMiddleware, upload.single("file"), async (req, res) =
             data: stockData
         });
     } catch (error) {
-        console.error("Error processing upload:", error); // Log error details
+        console.error("Error processing upload:", error);
         res.status(500).json({ error: "An error occurred while processing the file" });
     }
 });
 
-//update stock
+// ----------------------------
+// Update a stock record
+// ----------------------------
 router.put("/update/:id", authMiddleware, async (req, res) => {
     try {
         const stockId = req.params.id;
         const updates = req.body;
 
-        // Update the stock, ensuring it belongs to the logged-in user
         const updatedStock = await Stock.findOneAndUpdate(
             { _id: stockId, user: req.user.id },
             updates,
-            { new: true } // Return the updated document
+            { new: true }
         );
 
         if (!updatedStock) {
@@ -272,18 +345,17 @@ router.put("/update/:id", authMiddleware, async (req, res) => {
     }
 });
 
-
-
-// Download the current stock report
+// ----------------------------
+// Download the current stock report as Excel
+// ----------------------------
 router.get("/download", authMiddleware, async (req, res) => {
     try {
-        // Fetch stocks for the logged-in user
         const stocks = await Stock.find({ user: req.user.id });
-
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet("Stocks");
 
-        // Add header row
+        
+
         worksheet.columns = [
             { header: "Date", key: "entryDate", width: 20 },
             { header: "Truck", key: "truck", width: 15 },
@@ -295,7 +367,6 @@ router.get("/download", authMiddleware, async (req, res) => {
             { header: "Fumigated", key: "fumugated", width: 10 }
         ];
 
-        // Add rows
         if (stocks.length > 0) {
             stocks.forEach(stock => {
                 worksheet.addRow({
@@ -306,14 +377,14 @@ router.get("/download", authMiddleware, async (req, res) => {
                     entry: stock.entry || 0,
                     dispatched: stock.dispatched || 0,
                     balance: stock.balance || "Unknown",
-                    fumugated: stock.fumugated ? "No" : "Yes"
+                    // Adjust label as needed (here "Yes" if fumigated, "No" otherwise)
+                    fumugated: stock.fumugated ? "Yes" : "No"
                 });
             });
         } else {
             worksheet.addRow(["No stock data available."]);
         }
 
-        // Set response headers
         res.setHeader(
             "Content-Disposition",
             "attachment; filename=stocks_report.xlsx"
@@ -323,38 +394,203 @@ router.get("/download", authMiddleware, async (req, res) => {
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         );
 
-        // Send the workbook to the client
         await workbook.xlsx.write(res);
-        res.end(); // Ensure the response ends properly
+        res.end();
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-//route for ingoing stocks
-router.get("/inGoing",authMiddleware,async(req,res)=>{
+// ----------------------------
+// Get Ingoing Stocks for the logged-in user
+// ----------------------------
+router.get("/inGoing", authMiddleware, async (req, res) => {
     try {
-        const stock = await inGoing.find({user:req.user});
-        if(!stock){
-            return res.status(404).json({error:"Not found"})
+        // Use req.user.id for consistency
+        const stock = await inGoing.find({ user: req.user.id });
+        if (!stock || stock.length === 0) {
+            return res.status(404).json({ error: "Not found" });
         }
-        res.status(200).json({message:"Found",stock})
+        res.status(200).json({ message: "Found", stock });
     } catch (error) {
-        res.status(500).json({error:error.messagge})
+        res.status(500).json({ error: error.message });
     }
-})
+});
 
-//route for outgoing stocks
-router.get("/outGoing",authMiddleware,async(req,res)=>{
+// ----------------------------
+// Get Outgoing Stocks for the logged-in user
+// ----------------------------
+router.get("/outGoing", authMiddleware, async (req, res) => {
     try {
-        const stock = await outGoing.find({user:req.user});
-        if(!stock){
-            return res.status(404).json({error:"Not found"})
+        const stock = await outGoing.find({ user: req.user.id });
+        if (!stock || stock.length === 0) {
+            return res.status(404).json({ error: "Not found" });
         }
-        res.status(200).json({message:"Found",stock})
+        res.status(200).json({ message: "Found", stock });
     } catch (error) {
-        res.status(500).json({error:error.messagge})
+        res.status(500).json({ error: error.message });
     }
-})
+});
 
-module.exports = router
+
+// GET /allStockData?warehouse=WarehouseName&type=ingoing|outgoing|full
+router.get("/allStockData", async (req, res) => {
+    try {
+      const { warehouse, type } = req.query;
+      if (!warehouse) {
+        return res.status(400).json({ error: "Warehouse is required." });
+      }
+      if (!type || !["ingoing", "outgoing", "full"].includes(type.toLowerCase())) {
+        return res.status(400).json({ error: "Type must be ingoing, outgoing, or full." });
+      }
+      
+      let data;
+      switch (type.toLowerCase()) {
+        case "ingoing":
+          // Assuming your inGoing model has a 'name' field for warehouse
+          data = await inGoing.find({ name: warehouse });
+          break;
+        case "outgoing":
+          // Assuming your outGoing model has a 'name' field for warehouse
+          data = await outGoing.find({ name: warehouse });
+          break;
+        case "full":
+          // Using the Stock model which stores warehouse name in 'name'
+          data = await Stock.find({ name: warehouse });
+          break;
+      }
+      
+      if (!data || data.length === 0) {
+        return res.status(404).json({ error: "No stock data found for the given warehouse and type." });
+      }
+      
+      res.status(200).json({ data });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+
+  // GET /downloadStockReport?warehouse=WarehouseName&type=ingoing|outgoing|full&month=MM&year=YYYY
+router.get("/downloadStockReport", async (req, res) => {
+    try {
+      const { warehouse, type, month, year } = req.query;
+      
+      if (!warehouse) {
+        return res.status(400).json({ error: "Warehouse is required." });
+      }
+      if (!type || !["ingoing", "outgoing", "full"].includes(type.toLowerCase())) {
+        return res.status(400).json({ error: "Type must be ingoing, outgoing, or full." });
+      }
+      if (!month || !year) {
+        return res.status(400).json({ error: "Both month and year are required." });
+      }
+      
+      // Convert month (assumed 1-indexed) and year to a date range.
+      const m = parseInt(month, 10);
+      const y = parseInt(year, 10);
+      const startDate = new Date(y, m - 1, 1);
+      const endDate = new Date(y, m, 0, 23, 59, 59);  // Last day of the month
+      
+      let data;
+      let dateFilter = {};
+      // For full stock (Stock model) use "entryDate" as the date field; for inGoing/outGoing assume the field is "date".
+      if (type.toLowerCase() === "full") {
+        dateFilter = { entryDate: { $gte: startDate, $lte: endDate } };
+      } else {
+        dateFilter = { date: { $gte: startDate, $lte: endDate } };
+      }
+      
+      switch (type.toLowerCase()) {
+        case "ingoing":
+          data = await inGoing.find({ name: warehouse, ...dateFilter });
+          break;
+        case "outgoing":
+          data = await outGoing.find({ name: warehouse, ...dateFilter });
+          break;
+        case "full":
+          data = await Stock.find({ name: warehouse, ...dateFilter });
+          break;
+      }
+      
+      if (!data || data.length === 0) {
+        return res.status(404).json({ error: "No records found for the specified criteria." });
+      }
+      
+      // Create Excel file using ExcelJS
+      const workbook = new ExcelJS.Workbook();
+      const worksheet = workbook.addWorksheet("Stock Report");
+      
+      // Set columns based on the type.
+      if (type.toLowerCase() === "full") {
+        worksheet.columns = [
+          { header: "Entry Date", key: "entryDate", width: 20 },
+          { header: "Truck", key: "truck", width: 15 },
+          { header: "Waybill", key: "wBill", width: 20 },
+          { header: "Origin/Destination", key: "originDestination", width: 25 },
+          { header: "Product", key: "product", width: 15 },
+          { header: "Entry", key: "entry", width: 10 },
+          { header: "Dispatched", key: "dispatched", width: 10 },
+          { header: "Balance", key: "balance", width: 10 },
+          { header: "Fumigated", key: "fumugated", width: 10 }
+        ];
+        data.forEach(record => {
+          worksheet.addRow({
+            entryDate: record.entryDate ? record.entryDate.toISOString().split("T")[0] : "",
+            truck: record.truck || "Unknown",
+            wBill: record.wBill || "Unknown",
+            originDestination: record.originDestination || "Unknown",
+            product: record.product || "Unknown",
+            entry: record.entry || 0,
+            dispatched: record.dispatched || 0,
+            balance: record.balance || 0,
+            fumugated: record.fumugated ? "Yes" : "No"
+          });
+        });
+      } else {
+        // For inGoing/outGoing, assume common fields like date, plaque, wb, destination, product, unitPrice, value, balance, solde.
+        worksheet.columns = [
+          { header: "Date", key: "date", width: 20 },
+          { header: "Plaque", key: "plaque", width: 15 },
+          { header: "WB", key: "wb", width: 15 },
+          { header: "Destination", key: "destination", width: 25 },
+          { header: "Product", key: "product", width: 15 },
+          { header: "Unit Price", key: "unitPrice", width: 15 },
+          { header: "Value", key: "value", width: 10 },
+          { header: "Balance", key: "balance", width: 10 },
+          { header: "Solde", key: "solde", width: 10 }
+        ];
+        data.forEach(record => {
+          worksheet.addRow({
+            date: record.date ? record.date.toISOString().split("T")[0] : "",
+            plaque: record.plaque || "Unknown",
+            wb: record.wb || "Unknown",
+            destination: record.destination || "Unknown",
+            product: record.product || "Unknown",
+            unitPrice: record.unitPrice || 0,
+            value: record.value || 0,
+            balance: record.balance || 0,
+            solde: record.solde || 0
+          });
+        });
+      }
+      
+      // Set response headers for file download
+      res.setHeader(
+        "Content-Disposition",
+        `attachment; filename=${type}_stock_report_${month}_${year}.xlsx`
+      );
+      res.setHeader(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      
+      await workbook.xlsx.write(res);
+      res.end();
+      
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  });
+  
+
+module.exports = router;

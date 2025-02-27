@@ -10,7 +10,9 @@ const userSchema = mongoose.Schema(
         password: { type: String, required: true },
         stocks: [{ type: mongoose.Types.ObjectId, ref: "Stock" }], // Changed to an array
         inGoing: [{ type: mongoose.Types.ObjectId, ref: "inGoing" }], // Changed to an array
-        outGoing: [{ type: mongoose.Types.ObjectId, ref: "outGoing" }] // Changed to an array
+        outGoing: [{ type: mongoose.Types.ObjectId, ref: "outGoing" }], // Changed to an array
+        fumigants:[{type:mongoose.Types.ObjectId,ref:"Fumigants"}],
+        fumigation:[{type:mongoose.Types.ObjectId,ref:"Fumigation"}]
     },
     { timestamps: true } // Add timestamps
 );

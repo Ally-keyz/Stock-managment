@@ -12,6 +12,7 @@ const outGoingSchema = mongoose.Schema(
         balance: { type: Number, required: true } ,
         solde: { type: Number, required: true } ,
         fumugated: { type: Boolean, required: true },
+        contract:{type:String,required:true},
         user: { type: mongoose.Types.ObjectId, ref: "User", required: true }
     },
     { timestamps: true } // Add timestamps

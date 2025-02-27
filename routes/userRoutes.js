@@ -8,7 +8,7 @@ const authMiddleware = require("../middlewares/AuthMiddleware")
 const adminMiddleware = require("../middlewares/adminAuthMiddleware");
 
 //load environment variables
-dotenv.config()
+dotenv.config();
 
 // user registration route
 router.post("/register",adminMiddleware,async(req,res)=>{
@@ -60,7 +60,7 @@ router.post("/login",async(req,res)=>{
         }
         res.status(200).json({message:"logged in",token,user:existingUser})
     } catch (error) {
-        res.status(500).json({error:error.message})
+        res.status(500).json({error:error.message});
     }
 });
 
@@ -88,10 +88,46 @@ router.put("/update/:id", adminMiddleware, async (req, res) => {
       res.status(500).json({ error: error.message });
     }
   });
-  
+
+
+//Route for testing proccess only IT manager allowed
+router.post("/testingRegistration",async(req,res)=>{
+  try {
+    const { name , email, wareHouse , position , password} = req.body;
+    if(!name ||!email ||!wareHouse ||!position ||!password){
+      return res.status(400).json({error:"Please provide all fields"});
+    }
+    
+
+    // check if the user already exists
+    const existingUser = await User.findOne({email:email});
+    if(existingUser){
+      return res.status(400).json({error:"user already exists"});
+    }
+    //hash the password before inserting into the database
+    const hashedPassword = await bcrypt.hash(password,10);
+    const newUser = new User({
+      name,
+      email,
+      wareHouse,
+      position,
+      password:hashedPassword
+    });
+
+    const savedUser = await newUser.save();
+    if(!savedUser){
+      return res.status(500).json({error:"Failed to save the user"});
+    }
+    return res.status(201).json({message:"User Registered successfully"});
+  } catch (error) {
+    return res.status(500).json({error:`Internal server error ${error.message}`});
+  }
+});
+
+
 
 // route to delete users
-router.delete("/delete/:id", adminMiddleware, async (req, res) => {
+router.delete("/delete/:id",adminMiddleware, async (req, res) => {
     try {
       const deletedUser = await User.findByIdAndDelete(req.params.id);
       if (!deletedUser) { // Handle case where user is not found

@@ -8,6 +8,10 @@ const stockRoutes = require("./routes/stockRoutes");
 const reportRoutes = require("./routes/reportRoute");
 const manpowerRoutes = require("./routes/manpower");
 const cors = require("cors"); // Importing cors
+const contractRoutes = require("./routes/contractRoutes");
+const fumigationRoutes = require("./routes/fumigantsRoutes");
+const fumigationReports = require("./routes/fumigationReports");
+const viewingQuality = require("./routes/qualityAssess");
 
 // Load environment variables
 dotenv.config();
@@ -19,6 +23,11 @@ app.use("/users", userRoutes);
 app.use("/stock", stockRoutes);
 app.use("/myStock",reportRoutes);
 app.use("/manpowers",manpowerRoutes);
+app.use("/contracts",contractRoutes);
+app.use("/fumigants",fumigationRoutes);
+app.use("/fumigationReports",fumigationReports);
+app.use("/quality",viewingQuality);
+
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URL)
   .then(() => console.log("Connected to MongoDB"))
