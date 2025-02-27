@@ -5,7 +5,8 @@ const QualityModelSchema = mongoose.Schema({
     harm:{type:String,required:true},
     testWeight:{type:Number,required:true},
     grade:{type:String,required:true},
-    product:{type:mongoose.Types.ObjectId,ref:"InGoing",required:true}
+    product:{type:mongoose.Types.ObjectId,ref:"InGoing",required:true},
+    user: { type: mongoose.Types.ObjectId, ref: "User", required: true }
 });
 
 const QualityModel = mongoose.model("QualityAssessment",QualityModelSchema);

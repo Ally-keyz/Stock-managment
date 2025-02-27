@@ -132,7 +132,8 @@ router.post("/register", authMiddleware, async (req, res) => {
                 harm: harm || "Unknown",
                 testWeight: testWeight || 0,
                 grade: grade || "Unknown",
-                product: entryStock._id
+                product: entryStock._id,
+                user:req.user
             });
             await qualityAssessEntry.save();
         }

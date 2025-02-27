@@ -10,7 +10,11 @@ const ExcelJS = require("exceljs");
 router.get("/",authMiddleware,async(req,res)=>{
     try {
         //Fetch the data if the user token exists
-        const data = await qualityModel.find();
+        const user = req.user;
+        if(!user){
+            return res.status(400).json({error:"Failed to find the user"});
+        }
+        const data = await qualityModel.find({user:user});
         return res.status(200).json({data:data});
     } catch (error) {
         return res.status(500).json({error:`There is internal server error ${error.message}`});
@@ -19,10 +23,14 @@ router.get("/",authMiddleware,async(req,res)=>{
 });
 
 //reports 
-router.get("/download-excel", async (req, res) => {
+router.get("/download-excel",authMiddleware, async (req, res) => {
     try {
-        const qualities = await qualityModel.find().populate("product");
-
+        
+        const user = req.user;
+        if(!user){
+            return res.status(400).json({error:"User not found"});
+        }
+        const qualities = await qualityModel.find({user:user}).populate("product");
         if (!qualities.length) {
             return res.status(404).json({ message: "No data available" });
         }
