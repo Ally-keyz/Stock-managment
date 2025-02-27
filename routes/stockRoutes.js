@@ -11,6 +11,7 @@ const Contract = require("../models/contractsModel");
 const Quality = require("../models/qualityAssessmentModel");
 const Counter = require("../models/counterModel"); // Moved to top
 const authMiddleware = require("../middlewares/AuthMiddleware");
+const exceljs = require("exceljs");
 
 // ----------------------------
 // Register a new stock operation with Quality Assessment
@@ -213,6 +214,80 @@ router.get("/position", authMiddleware, async (req, res) => {
       res.status(500).json({ error: error.message });
   }
 });
+
+
+
+// Route to download the current stock position
+router.get("/download-stock-position", authMiddleware, async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.status(400).json({ error: "User cannot be found" });
+    }
+
+    // Aggregate total stock entries
+    const totalPosition = await Stock.aggregate([
+      { $match: { user: user._id } },
+      { 
+        $group: {
+          _id: null,
+          totalEntry: { $sum: { $toDouble: "$entry" } }
+        }
+      }
+    ]);
+
+    // Aggregate total stock dispatched
+    const totalDispatched = await Stock.aggregate([
+      { $match: { user: user._id } },
+      { 
+        $group: {
+          _id: null,
+          totalDispatched: { $sum: { $toDouble: "$dispatched" } }
+        }
+      }
+    ]);
+
+    // Extract values safely
+    const totalEntry = totalPosition.length ? totalPosition[0].totalEntry : 0;
+    const dispatchedValue = totalDispatched.length ? totalDispatched[0].totalDispatched : 0;
+    const remainingStock = totalEntry - dispatchedValue;
+
+    // Create Excel workbook and worksheet
+    const workbook = new exceljs.Workbook();
+    const worksheet = workbook.addWorksheet("Stock Position");
+
+    worksheet.columns = [
+      { header: "Total Entry", key: "totalEntry", width: 20 },
+      { header: "Total Dispatched", key: "totalDispatched", width: 20 },
+      { header: "Remaining Stock", key: "remainingStock", width: 20 }
+    ];
+
+    // Add a row with the calculated values
+    worksheet.addRow({
+      totalEntry: totalEntry,
+      totalDispatched: dispatchedValue,
+      remainingStock: remainingStock
+    });
+
+    // Set response headers and send the Excel file
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=current_stock_position.xlsx"
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+
+  } catch (error) {
+    console.error("Error downloading stock position:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 
 // ----------------------------
