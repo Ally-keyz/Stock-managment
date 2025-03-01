@@ -200,7 +200,7 @@ router.post("/fumigation/:id", adminMiddleware, async (req, res) => {
           if(quantityOfFumigants > remaining.remainingFumigants){
             return res.status(400).json({error:"Quantity of fumigants used is much than in stock"});
           }
-          const newRecord = quantityOfFumigants - remaining.remainingFumigants;
+          const newRecord = remaining.remainingFumigants - quantityOfFumigants;
         // Create a new fumigation record
         const newFumigationProcess = new Fumigation({
             date, 
@@ -221,7 +221,7 @@ router.post("/fumigation/:id", adminMiddleware, async (req, res) => {
         const updateProductInInGoingModel = await InGoing.findByIdAndUpdate(product, { $set: { fumugated: true } }, { new: true });   
         console.log(updateProductInInGoingModel);     
 
-        if (!updateProductInInGoingModel && !updateProductinStock) {
+        if (!updateProductInInGoingModel) {
             return res.status(404).json({ error: "Product not found in stock or in-going inventory" });
         }
 
