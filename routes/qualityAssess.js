@@ -4,6 +4,7 @@ const router = express.Router();
 const qualityModel = require("../models/qualityAssessmentModel");
 const authMiddleware = require("../middlewares/AuthMiddleware");
 const ExcelJS = require("exceljs");
+const Products = require("../models/inGoingModel");
 
 //route to fetch the quality assessment
 
@@ -19,6 +20,27 @@ router.get("/",authMiddleware,async(req,res)=>{
     } catch (error) {
         return res.status(500).json({error:`There is internal server error ${error.message}`});
         
+    }
+});
+
+router.get("/products/:id", authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Validate MongoDB ObjectId
+        if (!mongoose.isValidObjectId(id)) {
+            return res.status(400).json({ error: "Invalid product ID format" });
+        }
+
+        const product = await Products.findById(id);
+        if (!product) {
+            return res.status(404).json({ error: "Product not found" });
+        }
+
+        return res.status(200).json({ product });
+    } catch (error) {
+        console.error("Error fetching product:", error);
+        return res.status(500).json({ error: "Internal server error", message: error.message });
     }
 });
 

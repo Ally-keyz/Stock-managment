@@ -12,6 +12,7 @@ const contractRoutes = require("./routes/contractRoutes");
 const fumigationRoutes = require("./routes/fumigantsRoutes");
 const fumigationReports = require("./routes/fumigationReports");
 const viewingQuality = require("./routes/qualityAssess");
+const messages = require("./routes/messagesRoutes");
 
 // Load environment variables
 dotenv.config();
@@ -27,6 +28,7 @@ app.use("/contracts",contractRoutes);
 app.use("/fumigants",fumigationRoutes);
 app.use("/fumigationReports",fumigationReports);
 app.use("/quality",viewingQuality);
+app.use("/messages",messages);
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGO_URL)

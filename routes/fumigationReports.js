@@ -28,23 +28,15 @@ router.get("/fumigation-reports", userAuth, async (req, res) => {
 // 📌 Route to download fumigation reports (filtered by month & year)
 router.get("/download-fumigation-report", userAuth, async (req, res) => {
     try {
-        const { month, year } = req.query;
+       
         const user = req.user;
         if (!user) {
             return res.status(400).json({ error: "User not specified" });
         }
-        if (!month || !year) {
-            return res.status(400).json({ error: "Month and year are required" });
-        }
-
-        // Convert month to a number (if needed)
-        const monthNum = parseInt(month, 10);
-        const startDate = new Date(`${year}-${monthNum}-01`);
-        const endDate = new Date(year, monthNum, 0, 23, 59, 59); // Last day of the month
+        
 
         const reports = await Fumigation.find({
             user: user,
-            date: { $gte: startDate, $lte: endDate }
         }).sort({ date: -1 });
 
         if (reports.length === 0) {
@@ -65,7 +57,7 @@ router.get("/download-fumigation-report", userAuth, async (req, res) => {
 
         reports.forEach((record) => {
             worksheet.addRow({
-                date: record.date.toISOString().split("T")[0],
+                date: record.date,
                 quantityFumugated: record.quantityFumugated,
                 name: record.name,
                 quantityOfFumigants: record.quantityOfFumigants,
@@ -74,7 +66,7 @@ router.get("/download-fumigation-report", userAuth, async (req, res) => {
         });
 
         res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-        res.setHeader("Content-Disposition", `attachment; filename=fumigation_report_${month}_${year}.xlsx`);
+        res.setHeader("Content-Disposition", `attachment; filename=fumigation_report.xlsx`);
 
         await workbook.xlsx.write(res);
         res.end();
