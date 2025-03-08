@@ -31,7 +31,7 @@ router.post("/register", authMiddleware, async (req, res) => {
       MC,
       harm,
       testWeight,
-      grade
+      grade,
     } = req.body;
 
     // Input validation
@@ -63,7 +63,7 @@ router.post("/register", authMiddleware, async (req, res) => {
     // Find the last stock entry for balance calculation
     const lastStock = await Stock.findOne({
       product,
-      user: req.user.id
+      user: req.user.id,
     }).sort({ incrementId: -1 });
 
     let lastBalance = lastStock ? Number(lastStock.balance) : 0;
@@ -72,39 +72,47 @@ router.post("/register", authMiddleware, async (req, res) => {
 
     // Check that the dispatched value does not exceed available balance
     if (dispatchedValue > lastBalance) {
-      return res.status(400).json({ error: "Dispatched quantity cannot exceed available stock balance." });
+      return res
+        .status(400)
+        .json({ error: "Dispatched quantity cannot exceed available stock balance." });
     }
 
     // Create inGoing and outGoing stock records if applicable
-    const inGoingStock = entryValue > 0 ? new inGoing({
-      date: entryDate || new Date(),
-      plaque: truck || "Unknown",
-      wb: wBill || "Unknown",
-      destination: originDestination || "Unknown",
-      entry: clearedProduct,
-      unitPrice: unitPrice || 0,
-      value: entryValue,
-      balance: lastBalance,
-      solde: lastBalance + entryValue,
-      contract: existingContract.operatorName || "unknown",
-      fumugated: false,
-      user: req.user.id
-    }) : null;
+    const inGoingStock =
+      entryValue > 0
+        ? new inGoing({
+            date: entryDate || new Date(),
+            plaque: truck || "Unknown",
+            wb: wBill || "Unknown",
+            destination: originDestination || "Unknown",
+            entry: clearedProduct,
+            unitPrice: unitPrice || 0,
+            value: entryValue,
+            balance: lastBalance,
+            solde: lastBalance + entryValue,
+            contract: existingContract.operatorName || "unknown",
+            fumugated: false,
+            user: req.user.id,
+          })
+        : null;
 
-    const outGoingStock = dispatchedValue > 0 ? new outGoing({
-      date: entryDate || new Date(),
-      plaque: truck || "Unknown",
-      wb: wBill || "Unknown",
-      destination: originDestination || "Unknown",
-      exit: clearedProduct,
-      unitPrice: unitPrice || 0,
-      value: dispatchedValue,
-      balance: lastBalance,
-      solde: lastBalance - dispatchedValue,
-      contract: existingContract.operatorName || "unknown",
-      fumugated: false,
-      user: req.user.id
-    }) : null;
+    const outGoingStock =
+      dispatchedValue > 0
+        ? new outGoing({
+            date: entryDate || new Date(),
+            plaque: truck || "Unknown",
+            wb: wBill || "Unknown",
+            destination: originDestination || "Unknown",
+            exit: clearedProduct,
+            unitPrice: unitPrice || 0,
+            value: dispatchedValue,
+            balance: lastBalance,
+            solde: lastBalance - dispatchedValue,
+            contract: existingContract.operatorName || "unknown",
+            fumugated: false,
+            user: req.user.id,
+          })
+        : null;
 
     const newStock = new Stock({
       name: req.user.wareHouse || "Unknown",
@@ -121,9 +129,9 @@ router.post("/register", authMiddleware, async (req, res) => {
       fumugated: true,
       contract: existingContract.operatorName || "unknown",
       user: req.user.id,
-      incrementId: counter.seq
+      incrementId: counter.seq,
     });
-        
+
     // Save inGoing and outGoing entries if applicable
     const entryStock = inGoingStock ? await inGoingStock.save() : null;
     const dispatchedStock = outGoingStock ? await outGoingStock.save() : null;
@@ -132,6 +140,7 @@ router.post("/register", authMiddleware, async (req, res) => {
     await newStock.save();
 
     // Save quality assessments based on the operation performed
+    // Only create quality assessment for the entry operation
     if (entryStock) {
       const qualityAssessEntry = new Quality({
         MC: MC || 0,
@@ -139,30 +148,21 @@ router.post("/register", authMiddleware, async (req, res) => {
         testWeight: testWeight || 0,
         grade: grade || "Unknown",
         product: entryStock._id,
-        user: req.user
+        user: req.user,
       });
       await qualityAssessEntry.save();
     }
-    if (dispatchedStock) {
-      const qualityAssessDispatch = new Quality({
-        MC: MC || 0,
-        harm: harm || "Unknown",
-        testWeight: testWeight || 0,
-        grade: grade || "Unknown",
-        product: dispatchedStock._id,
-        user: req.user
-      });
-      await qualityAssessDispatch.save();
-    }
+    // Removed the quality assessment for dispatched products
 
     res.status(201).json({
       message: "Stock operation recorded successfully.",
-      data: newStock
+      data: newStock,
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 //-----------------------------
 // Route to calculate the total stock position 
