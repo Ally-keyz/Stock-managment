@@ -5,6 +5,7 @@ const qualityModel = require("../models/qualityAssessmentModel");
 const authMiddleware = require("../middlewares/AuthMiddleware");
 const ExcelJS = require("exceljs");
 const Products = require("../models/inGoingModel");
+const mongoose = require("mongoose");
 
 //route to fetch the quality assessment
 
