@@ -44,10 +44,11 @@ router.post("/", adminMiddleware, async (req, res) => {
         }
 
         // Update existing fumigant's quantity and remainingFumigants
+        
         const updatedFumigant = await Fumigants.findByIdAndUpdate(
             lastSameFumigant._id,
             
-                 { quantity: quantity, remainingFumigants: quantity + lastSameFumigant.remainingFumigants }
+                 { quantity: quantity, remainingFumigants: Number(quantity) + Number(lastSameFumigant.remainingFumigants) }
             ,
             { new: true }
         );
@@ -193,7 +194,7 @@ router.post("/fumigation/:id", adminMiddleware, async (req, res) => {
         if (!date || !quantityFumugated || !name || !quantityOfFumigants || !product ||!user) {
             return res.status(400).json({ error: "Please provide all the fields" });
         }
-          const remaining = await Fumigants.findOne({name:name});
+          const remaining = await Fumigants.findOne({name:name,user:user});
           if(!remaining){
             return res.status(400).json({message:"Fumigant used is not found"});
           }
