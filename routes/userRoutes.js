@@ -140,4 +140,18 @@ router.delete("/delete/:id",adminMiddleware, async (req, res) => {
   });
   
 
+  // route to retrieve all the users from the data base
+  router.get("/user",authMiddleware,async(req,res)=>{
+    try {
+      const user = req.user;
+      if(!user){
+        return res.status(400).json({error:"Please provide a user please"});
+      }
+      const users = await User.find();
+      return res.status(200).json({message:"success",users});
+    } catch (error) {
+      return res.status(500).json({error:`Internal server error ${error.message}`});
+    }
+  })
+
 module.exports = router;
