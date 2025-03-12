@@ -6,8 +6,9 @@ const authMiddleware = require("../middlewares/AuthMiddleware");
 //route to send messages
 router.post("/:id",authMiddleware,async(req,res)=>{
     try {
-        const{text , recipient} = req.body;
-        const sender = req.params.id;
+        const{text } = req.body;
+        const sender = req.user;
+        const recipient = req.params.id
         if(!text || !recipient){
             return res.status(400).json({error:"All fields are required"});
         }
@@ -27,13 +28,13 @@ router.post("/:id",authMiddleware,async(req,res)=>{
 });
 
 //view all messages that belongs to the user
-router.get("/:id",authMiddleware,async(req,res)=>{
+router.get("/",authMiddleware,async(req,res)=>{
     try {
-        const {id} = req.params.id;
+        const id = req.user;
         if(!id){
             return res.status(400).json({error:"Please provide an id please"});
         }
-        const messages = await Messages.find({user:id});
+        const messages = await Messages.find({sender:id});
         if(!messages){
             return res.status(404).json({error:"No messages found"});
         }
