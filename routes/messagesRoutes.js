@@ -5,11 +5,10 @@ const authMiddleware = require("../middlewares/AuthMiddleware");
 const Users = require("../models/userModel");
 
 //route to send messages
-router.post("/:id",authMiddleware,async(req,res)=>{
+router.post("/",authMiddleware,async(req,res)=>{
     try {
-        const{text } = req.body;
+        const{ text , recipient } = req.body;
         const sender = req.user;
-        const recipient = req.params.id
         if(!text || !recipient){
             return res.status(400).json({error:"All fields are required"});
         }
@@ -20,7 +19,7 @@ router.post("/:id",authMiddleware,async(req,res)=>{
 
         //find the specific details for the reciver
 
-        const reciever = await Users.findOne({_id:recipient});
+        const reciever = await Users.findOne({name:recipient});
         const recieverName = reciever.name;
         const newMessage = new Messages({
             text:text,
