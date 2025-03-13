@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const Messages = require("../models/messagesModel");
 const authMiddleware = require("../middlewares/AuthMiddleware");
+const Users = require("../models/userModel");
 
 //route to send messages
 router.post("/:id",authMiddleware,async(req,res)=>{
@@ -12,10 +13,20 @@ router.post("/:id",authMiddleware,async(req,res)=>{
         if(!text || !recipient){
             return res.status(400).json({error:"All fields are required"});
         }
+
+        //find the user name in the database
+        const user = await Users.findOne({_id:sender});
+        const userName = user.name;
+
+        //find the specific details for the reciver
+
+        const reciever = await Users.findOne({_id:recipient});
+        const recieverName = reciever.name;
         const newMessage = new Messages({
             text:text,
-            sender:sender,
-            recipient:recipient
+            sender:userName,
+            senderId:sender,
+            recipient:recieverName
         });
         const savedMessage = await newMessage.save();
         if(!savedMessage){
@@ -34,7 +45,7 @@ router.get("/",authMiddleware,async(req,res)=>{
         if(!id){
             return res.status(400).json({error:"Please provide an id please"});
         }
-        const messages = await Messages.find({sender:id});
+        const messages = await Messages.find({senderId:id});
         if(!messages){
             return res.status(404).json({error:"No messages found"});
         }
