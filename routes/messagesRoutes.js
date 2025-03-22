@@ -54,4 +54,7 @@ router.get("/",authMiddleware,async(req,res)=>{
     }
 });
 
+// api to check the recived messages 
+router.get()
+
 module.exports = router;
